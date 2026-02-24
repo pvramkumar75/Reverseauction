@@ -1,10 +1,7 @@
 {
     "version": 2,
+    "name": "bidflow-frontend",
     "builds": [
-        {
-            "src": "backend/server.py",
-            "use": "@vercel/python"
-        },
         {
             "src": "frontend/package.json",
             "use": "@vercel/static-build",
@@ -14,10 +11,6 @@
         }
     ],
     "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "backend/server.py"
-        },
         {
             "source": "/(.*)",
             "destination": "frontend/$1"
