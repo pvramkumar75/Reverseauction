@@ -650,7 +650,7 @@ async def join_auction(sid, data):
 
 # App Setup
 app.include_router(api_router)
-socket_app = socketio.ASGIApp(sio, app)
+app = socketio.ASGIApp(sio, app)
 
 @app.on_event("startup")
 async def startup():
