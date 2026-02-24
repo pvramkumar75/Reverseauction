@@ -1,0 +1,140 @@
+{
+  "project_name": "B2B Reverse Auction Platform",
+  "design_philosophy": {
+    "identity": "The Anti-AI Designer (E1)",
+    "core_principles": [
+      "Fusion over Imitation: Mix 'Swiss Precision' with 'Stock Market' urgency.",
+      "Emotion First: The Buyer feels 'Control', The Supplier feels 'Competition'.",
+      "Content is King: Data is the hero. Noise is the enemy.",
+      "Negative Space: Dense data needs breathing room. Use whitespace to group logic."
+    ],
+    "anti_patterns": [
+      "No generic 'SaaS Blue' (Use Deep Indigo/Navy).",
+      "No Inter for Headings (Use Manrope).",
+      "No default centered layouts (Use Asymmetry/Grid).",
+      "No gradients on text (Keep it legible)."
+    ]
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Manrope, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "installation": {
+      "instructions": "Add the following import to your index.css or index.html",
+      "code": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;600;700;800&display=swap');"
+    },
+    "usage_rules": {
+      "headings": "Use 'font-heading' (Manrope) for all h1-h6. Weights: 600/700/800. Tracking: tight.",
+      "body": "Use 'font-sans' (Inter) for general text. Weights: 400/500.",
+      "numbers": "MANDATORY: Use 'font-mono' (JetBrains Mono) for ALL prices, timers, bids, and rank indicators. This is critical for the 'Trading Floor' aesthetic."
+    }
+  },
+  "colors": {
+    "theme_strategy": "High Contrast Professional (Swiss + Navy)",
+    "palette": {
+      "primary": {
+        "DEFAULT": "#4F46E5",
+        "foreground": "#FFFFFF",
+        "description": "Indigo 600 - A deeper, more confident blue than standard Tailwind blue."
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A",
+        "description": "Slate 100 - High contrast surface for components."
+      },
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "success": {
+        "DEFAULT": "#10B981",
+        "description": "Emerald 500 - For L1 (Winning) status."
+      },
+      "warning": {
+        "DEFAULT": "#F59E0B",
+        "description": "Amber 500 - For L2 (Close) status."
+      },
+      "destructive": {
+        "DEFAULT": "#E11D48",
+        "description": "Rose 600 - For L3+ (Losing) status."
+      },
+      "neutral": {
+        "900": "#0F172A",
+        "500": "#64748B",
+        "100": "#F1F5F9"
+      }
+    },
+    "gradients": {
+      "auction_active": "bg-gradient-to-r from-indigo-600 to-blue-600",
+      "timer_urgent": "bg-gradient-to-r from-orange-500 to-red-600"
+    }
+  },
+  "layout_strategies": {
+    "spacing": {
+      "base_scale": "Use 2x standard spacing. Minimum padding for cards: p-6 or p-8.",
+      "containers": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+    },
+    "bento_grids": {
+      "dashboard_mode": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "live_auction_mode": "grid-cols-12 gap-4. Hero Metric (Time): col-span-12 md:col-span-4. Ranking Table: col-span-12 md:col-span-8 row-span-2."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "rounded-md bg-primary text-primary-foreground hover:bg-primary/90 shadow-md transition-all active:scale-95 font-medium px-8 py-3",
+      "outline": "rounded-md border-2 border-slate-200 bg-transparent hover:bg-slate-50 hover:border-slate-300 text-slate-700 font-medium",
+      "danger": "rounded-md bg-destructive text-white hover:bg-destructive/90"
+    },
+    "cards": {
+      "style": "bg-white rounded-xl border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.08)] transition-shadow duration-300",
+      "interactive": "cursor-pointer hover:border-indigo-100 active:border-indigo-200"
+    },
+    "inputs": {
+      "style": "h-12 rounded-md border-slate-200 bg-slate-50 px-4 text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all",
+      "label_style": "text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide"
+    },
+    "status_badges": {
+      "L1": "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 font-mono",
+      "L2": "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 font-mono",
+      "L3": "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200 font-mono"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "soft": "shadow-[0_2px_10px_rgba(0,0,0,0.03)]",
+      "float": "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)]"
+    },
+    "borders": {
+      "subtle": "border border-slate-100",
+      "active": "border-l-4 border-indigo-500"
+    },
+    "textures": {
+      "noise": "Use a subtle noise overlay on the sidebar or header to reduce digital flatness (opacity 0.02)."
+    }
+  },
+  "motion": {
+    "hover": "transition-all duration-200 ease-out hover:-translate-y-0.5",
+    "list_item": "animate-in fade-in slide-in-from-bottom-2 duration-300",
+    "urgent_pulse": "animate-pulse"
+  },
+  "libraries": {
+    "icons": "lucide-react (Default). Use simple, stroke-heavy icons.",
+    "charts": "recharts (via shadcn/ui charts). Minimalist line charts for bid history.",
+    "toast": "sonner",
+    "date": "date-fns"
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install fonts immediately. Update tailwind.config.js with the new font families and colors.",
+    "2. THEME: Default to Light Mode. It is cleaner for data tables. Use Dark Mode ONLY for the 'Live Auction' screen if desired, but keep it consistent.",
+    "3. DATA: Always align numbers to the RIGHT. Use JetBrains Mono for all pricing and timers.",
+    "4. FORMS: Break large forms (Create Auction) into steps. Do not show 50 inputs at once.",
+    "5. CONFIDENTIALITY UI: In Supplier View, explicitly label hidden fields (e.g., 'Competitor Bid: HIDDEN').",
+    "6. MICRO-INTERACTIONS: When a new bid comes in via WebSocket, flash the row background yellow/green for 500ms.",
+    "7. IMAGE USAGE: Only use images for empty states or login backgrounds. Do not clutter the dashboard with photos."
+  ],
+  "image_urls": {
+    "login_background": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop",
+    "empty_state_auction": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=2000&auto=format&fit=crop",
+    "winner_celebration": "https://images.unsplash.com/photo-1553484771-371af705e561?q=80&w=2000&auto=format&fit=crop"
+  }
+}
