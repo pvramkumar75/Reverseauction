@@ -25,6 +25,9 @@ load_dotenv(ROOT_DIR / '.env')
 # Database setup (SQLite or Postgres)
 DATABASE_URL = os.environ.get('DATABASE_URL', "sqlite+aiosqlite:///./bidflow.db")
 if DATABASE_URL.startswith("postgresql://"):
+    # Clear query params like ?sslmode=require because asyncpg handles SSL differently
+    if "?" in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.split("?")[0]
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 engine = create_async_engine(DATABASE_URL, echo=False)
