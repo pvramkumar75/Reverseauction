@@ -258,26 +258,39 @@ const SupplierBidding = () => {
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Trophy className="w-24 h-24" />
             </div>
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div>
-                <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Current Leading Bid (L1)</div>
-                <div className="text-4xl font-mono font-bold text-emerald-400">
-                  ₹{(auction.current_l1 || auction.config?.start_price || 0).toLocaleString('en-IN')}
+            {(() => {
+              const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+              const totalCeiling = (auction.config?.start_price || 0) * totalQty;
+              const totalMinDecrement = (auction.config?.min_decrement || 0) * totalQty;
+              const currentL1 = auction.current_l1 || totalCeiling;
+              const targetToLead = Math.max(0, currentL1 - totalMinDecrement);
+              return (
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div>
+                    <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Current Leading Bid (L1)</div>
+                    <div className="text-4xl font-mono font-bold text-emerald-400">
+                      ₹{currentL1.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Ceiling: ₹{totalCeiling.toLocaleString('en-IN')} (₹{auction.config?.start_price}/unit × {totalQty} units)
+                    </div>
+                  </div>
+                  <div className="h-full border-l border-slate-700 hidden md:block" />
+                  <div>
+                    <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Target to Lead</div>
+                    <div className="text-2xl font-mono font-bold text-white">
+                      ₹{targetToLead.toLocaleString('en-IN')}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-400 italic">
+                      Drop below this to take the Lead position. (Min decrement: ₹{totalMinDecrement.toLocaleString('en-IN')} total)
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="h-full border-l border-slate-700 hidden md:block" />
-              <div>
-                <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Target to Lead</div>
-                <div className="text-2xl font-mono font-bold text-white">
-                  ₹{Math.max(0, (auction.current_l1 || auction.config?.start_price || 0) - (auction.config?.min_decrement || 0)).toLocaleString('en-IN')}
-                </div>
-                <div className="mt-2 text-xs text-slate-400 italic">
-                  Drop below this to take the Lead position.
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         )}
+
 
         <form onSubmit={handleSubmit} data-testid="bid-form">
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8 mb-8">
