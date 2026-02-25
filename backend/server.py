@@ -186,10 +186,10 @@ class Bid(BaseModel):
     updated_at: datetime
 
 # Create the main app
-app = FastAPI()
+fastapi_app = FastAPI()
 
 # CORS configuration
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
@@ -649,10 +649,10 @@ async def join_auction(sid, data):
     sio.enter_room(sid, room)
 
 # App Setup
-app.include_router(api_router)
-app = socketio.ASGIApp(sio, app)
+fastapi_app.include_router(api_router)
+app = socketio.ASGIApp(sio, fastapi_app)
 
-@app.on_event("startup")
+@fastapi_app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
