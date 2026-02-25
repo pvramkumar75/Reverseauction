@@ -298,12 +298,21 @@ const CreateAuction = () => {
                       <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
                         Unit
                       </Label>
-                      <Input
+                      <select
                         value={item.unit}
                         onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                        placeholder="PCS, KG, M, etc."
-                        className="h-12"
-                      />
+                        className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="PCS">PCS (Pieces)</option>
+                        <option value="KG">KG (Kilograms)</option>
+                        <option value="MT">MT (Metric Ton)</option>
+                        <option value="M">M (Meters)</option>
+                        <option value="L">L (Liters)</option>
+                        <option value="Nos">Nos (Numbers)</option>
+                        <option value="Set">Set</option>
+                        <option value="Box">Box</option>
+                        <option value="Sq.m">Sq.m (Sq. Meters)</option>
+                      </select>
                     </div>
 
                     <div className="md:col-span-2">
@@ -434,40 +443,56 @@ const CreateAuction = () => {
         {step === 4 && (
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8" data-testid="step-config">
             <h2 className="text-2xl font-heading font-bold text-slate-900 mb-6">Auction Configuration</h2>
+
+            {/* Estimated Total Preview */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-5 mb-6">
+              <div className="text-xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">Estimated Total Value</div>
+              <div className="text-2xl font-mono font-bold text-indigo-700">
+                ₹{(config.start_price * items.reduce((sum, item) => sum + (item.quantity || 0), 0)).toLocaleString('en-IN')}
+              </div>
+              <div className="text-xs text-indigo-400 mt-1">
+                {items.map((item, i) => `${item.item_code || `Item ${i + 1}`}: ${item.quantity} ${item.unit} × ₹${config.start_price}`).join(' | ')}
+              </div>
+            </div>
+
             <div className="space-y-6">
               <div>
                 <Label htmlFor="start_price" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                  Starting Price (₹) *
+                  Ceiling Price per Unit (₹) *
                 </Label>
                 <Input
                   id="start_price"
                   name="start_price"
                   type="number"
+                  step="0.01"
                   value={config.start_price}
                   onChange={handleConfigChange}
-                  placeholder="10000"
+                  placeholder="e.g., 255"
                   className="h-12"
                   data-testid="start-price-input"
                 />
-                <p className="text-sm text-slate-500 mt-1">Maximum acceptable price for this auction</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Maximum unit price set by buyer. Suppliers must bid below this per-unit price.
+                </p>
               </div>
 
               <div>
                 <Label htmlFor="min_decrement" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                  Minimum Decrement (₹) *
+                  Minimum Decrement per Unit (₹) *
                 </Label>
                 <Input
                   id="min_decrement"
                   name="min_decrement"
                   type="number"
+                  step="0.01"
                   value={config.min_decrement}
                   onChange={handleConfigChange}
-                  placeholder="100"
+                  placeholder="e.g., 1"
                   className="h-12"
                   data-testid="min-decrement-input"
                 />
                 <p className="text-sm text-slate-500 mt-1">
-                  Minimum amount by which suppliers must reduce their bid
+                  Each new bid must be at least this much lower (per unit) than the current L1.
                 </p>
               </div>
 
@@ -485,7 +510,9 @@ const CreateAuction = () => {
                   className="h-12"
                   data-testid="duration-input"
                 />
-                <p className="text-sm text-slate-500 mt-1">How long the auction will run once started</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  How long the auction will run. Auto-extends by 2 minutes if a bid is placed near the end.
+                </p>
               </div>
             </div>
           </div>
