@@ -6,7 +6,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 groq
 sqlalchemy[asyncio]
-aiosqlite
+asyncpg
 pydantic[email]
 psycopg2-binary
 email-validator
