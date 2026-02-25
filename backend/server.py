@@ -463,22 +463,15 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="Auction is not active")
     
     config = json.loads(auction.config)
-    items = json.loads(auction.items)
     
-    # start_price and min_decrement are PER UNIT values
-    # Calculate total ceiling and total decrement by scaling with total quantity
-    total_quantity = sum(item.get('quantity', 0) for item in items)
-    if total_quantity == 0:
-        total_quantity = 1  # fallback
-    
-    total_ceiling = config['start_price'] * total_quantity
-    total_min_decrement = config['min_decrement'] * total_quantity
-    
-    if bid_data.total_amount >= total_ceiling:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Bid total (₹{bid_data.total_amount}) must be lower than total ceiling (₹{total_ceiling}) [₹{config['start_price']}/unit × {total_quantity} units]"
-        )
+    # Validate each item's UNIT PRICE against start_price (per-unit ceiling)
+    for item_bid in bid_data.item_bids:
+        unit_price = item_bid.get('unit_price', 0)
+        if unit_price >= config['start_price']:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unit price (₹{unit_price}) must be lower than starting price (₹{config['start_price']}/unit)"
+            )
     
     # Get current best bid
     bid_result = await db.execute(
@@ -487,12 +480,18 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     best_bid = bid_result.scalars().first()
     
     if best_bid:
-        max_allowed = best_bid.total_amount - total_min_decrement
-        if bid_data.total_amount > max_allowed:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Bid must be at least ₹{total_min_decrement} lower than the current best bid (₹{best_bid.total_amount}). Max allowed: ₹{max_allowed}"
-            )
+        min_decrement = config['min_decrement']
+        best_item_bids = json.loads(best_bid.item_bids) if isinstance(best_bid.item_bids, str) else best_bid.item_bids
+        for i, item_bid in enumerate(bid_data.item_bids):
+            unit_price = item_bid.get('unit_price', 0)
+            if i < len(best_item_bids):
+                best_unit = best_item_bids[i].get('unit_price', 0)
+                max_allowed_unit = best_unit - min_decrement
+                if unit_price > max_allowed_unit:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unit price (₹{unit_price}) must be at least ₹{min_decrement} lower than current best (₹{best_unit}/unit). Max: ₹{max_allowed_unit}/unit"
+                    )
 
     
     # Check if bid exists

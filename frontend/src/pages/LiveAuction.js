@@ -40,7 +40,6 @@ const LiveAuction = () => {
       console.log('Bids update received:', data);
       setBids(data.bids);
       if (data.bids.length > 0) {
-        // Find the bid that was most recently updated
         const latest = [...data.bids].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
         if (latest) {
           setLatestBidId(latest.id);
@@ -60,8 +59,15 @@ const LiveAuction = () => {
       fetchAuction();
     });
 
+    // Poll for bids every 5 seconds as fallback (WebSocket may be unreliable on free tier)
+    const pollInterval = setInterval(() => {
+      fetchBids();
+      fetchAuction();
+    }, 5000);
+
     return () => {
       newSocket.close();
+      clearInterval(pollInterval);
     };
   }, [auctionId]);
 
@@ -217,12 +223,23 @@ const LiveAuction = () => {
             <div className="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-2">
               Total Savings
             </div>
-            <div className="text-2xl font-heading font-bold text-indigo-700">
-              ₹{Math.max(0, (auction.config?.start_price || 0) - (bids.length > 0 ? Math.min(...bids.map(b => b.total_amount)) : (auction.config?.start_price || 0))).toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-indigo-400 mt-1">
-              {bids.length > 0 ? `${(((auction.config?.start_price || 0) - Math.min(...bids.map(b => b.total_amount))) / (auction.config?.start_price || 1) * 100).toFixed(1)}% below start price` : 'No bids yet'}
-            </div>
+            {(() => {
+              const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+              const totalEstimated = (auction.config?.start_price || 0) * totalQty;
+              const bestBidTotal = bids.length > 0 ? Math.min(...bids.map(b => b.total_amount)) : totalEstimated;
+              const savings = Math.max(0, totalEstimated - bestBidTotal);
+              const savingsPercent = totalEstimated > 0 ? ((savings / totalEstimated) * 100).toFixed(1) : '0.0';
+              return (
+                <>
+                  <div className="text-2xl font-heading font-bold text-indigo-700">
+                    ₹{savings.toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-xs text-indigo-400 mt-1">
+                    {bids.length > 0 ? `${savingsPercent}% below estimated ₹${totalEstimated.toLocaleString('en-IN')}` : 'No bids yet'}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
 
