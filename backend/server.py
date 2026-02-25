@@ -72,7 +72,7 @@ class UserDB(Base):
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
     name = Column(String)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
 
 class AuctionDB(Base):
     __tablename__ = "auctions"
@@ -90,7 +90,7 @@ class AuctionDB(Base):
     status = Column(String, default="draft")
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
 
 class BidDB(Base):
     __tablename__ = "bids"
@@ -104,8 +104,8 @@ class BidDB(Base):
     warranty_months = Column(Integer, nullable=True)
     remarks = Column(Text, nullable=True)
     rank = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
+    updated_at = Column(DateTime, default=lambda: datetime.utcnow())
 
 # Pydantic Models (matching existing ones)
 class UserCreate(BaseModel):
@@ -221,7 +221,7 @@ async def get_db():
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -358,7 +358,7 @@ async def get_auction_by_id(auction_id: str, db: AsyncSession = Depends(get_db))
     # Check if auction should be completed
     status = a.status
     if status == 'active' and a.end_time:
-        if datetime.now(timezone.utc).replace(tzinfo=None) > a.end_time:
+        if datetime.utcnow() > a.end_time:
             status = 'completed'
             await db.execute(update(AuctionDB).where(AuctionDB.id == auction_id).values(status=status))
             await db.commit()
@@ -389,7 +389,7 @@ async def start_auction(auction_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Auction not found")
     
     config = json.loads(a.config)
-    start_time = datetime.now(timezone.utc).replace(tzinfo=None)
+    start_time = datetime.utcnow()
     end_time = start_time + timedelta(minutes=config['duration_minutes'])
     
     await db.execute(
@@ -490,7 +490,7 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     )
     existing_bid = result.scalar_one_or_none()
     
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.utcnow()
     if existing_bid:
         bid_id = existing_bid.id
         await db.execute(
