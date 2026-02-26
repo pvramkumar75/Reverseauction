@@ -289,9 +289,13 @@ async def create_auction(auction_data: AuctionCreate, db: AsyncSession = Depends
         payment_terms=auction_data.payment_terms,
         delivery_terms=auction_data.delivery_terms,
         freight_condition=auction_data.freight_condition,
-        items=json.dumps([i.model_dump() for i in auction_data.items]),
+        items=json.dumps([{**i.model_dump(), 'estimated_price': round(i.estimated_price or 0, 2)} for i in auction_data.items]),
         suppliers=json.dumps([s.model_dump() for s in auction_data.suppliers]),
-        config=json.dumps(auction_data.config.model_dump()),
+        config=json.dumps({
+            **auction_data.config.model_dump(),
+            'start_price': round(auction_data.config.start_price, 2),
+            'min_decrement': round(auction_data.config.min_decrement, 2)
+        }),
         status="draft"
     )
     db.add(auction)
