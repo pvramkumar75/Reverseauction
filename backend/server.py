@@ -140,6 +140,10 @@ class SupplierInfo(BaseModel):
     contact_person: str
     email: EmailStr
     phone: str
+    gst_no: Optional[str] = None
+    msme: Optional[str] = None
+    approved_vendor: Optional[bool] = False
+    remarks: Optional[str] = None
     token: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
 
 class AuctionConfig(BaseModel):

@@ -32,7 +32,7 @@ const CreateAuction = () => {
   ]);
 
   const [suppliers, setSuppliers] = useState([
-    { name: '', contact_person: '', email: '', phone: '' },
+    { name: '', contact_person: '', email: '', phone: '', gst_no: '', msme: 'No', approved_vendor: false, remarks: '' },
   ]);
 
   const [config, setConfig] = useState({
@@ -125,8 +125,72 @@ const CreateAuction = () => {
     e.target.value = '';
   };
 
+  const handlePasteSuppliers = (e) => {
+    e.preventDefault();
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pastedData = clipboardData.getData('Text');
+    if (!pastedData) return;
+
+    const rows = pastedData.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
+    const newSuppliers = rows.map((row) => {
+      const separator = row.includes('\t') ? '\t' : ',';
+      const cells = row.split(separator);
+      return {
+        contact_person: cells[0]?.trim() || '',
+        name: cells[1]?.trim() || '',
+        email: cells[2]?.trim() || '',
+        phone: cells[3]?.trim() || '',
+        gst_no: cells[4]?.trim() || '',
+        msme: cells[5]?.trim() || 'No',
+        approved_vendor: cells[6]?.trim().toLowerCase() === 'yes',
+        remarks: cells[7]?.trim() || ''
+      };
+    });
+
+    if (suppliers.length === 1 && !suppliers[0].name && !suppliers[0].email) {
+      setSuppliers(newSuppliers);
+    } else {
+      setSuppliers([...suppliers, ...newSuppliers]);
+    }
+    toast.success(`Pasted ${newSuppliers.length} suppliers`);
+  };
+
+  const handleSupplierFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = event.target.result;
+      const rows = csvData.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
+
+      const newSuppliers = rows.map(row => {
+        const cells = row.split(',');
+        return {
+          contact_person: cells[0]?.trim() || '',
+          name: cells[1]?.trim() || '',
+          email: cells[2]?.trim() || '',
+          phone: cells[3]?.trim() || '',
+          gst_no: cells[4]?.trim() || '',
+          msme: cells[5]?.trim() || 'No',
+          approved_vendor: cells[6]?.trim().toLowerCase() === 'yes',
+          remarks: cells[7]?.trim() || ''
+        };
+      });
+
+      if (suppliers.length === 1 && !suppliers[0].name && !suppliers[0].email) {
+        setSuppliers(newSuppliers);
+      } else {
+        setSuppliers([...suppliers, ...newSuppliers]);
+      }
+      toast.success(`Uploaded ${newSuppliers.length} suppliers from CSV`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const addSupplier = () => {
-    setSuppliers([...suppliers, { name: '', contact_person: '', email: '', phone: '' }]);
+    setSuppliers([...suppliers, { name: '', contact_person: '', email: '', phone: '', gst_no: '', msme: 'No', approved_vendor: false, remarks: '' }]);
   };
 
   const removeSupplier = (index) => {
@@ -137,7 +201,11 @@ const CreateAuction = () => {
 
   const updateSupplier = (index, field, value) => {
     const updated = [...suppliers];
-    updated[index][field] = value;
+    if (field === 'approved_vendor') {
+      updated[index][field] = value;
+    } else {
+      updated[index][field] = value;
+    }
     setSuppliers(updated);
   };
 
@@ -487,82 +555,149 @@ const CreateAuction = () => {
           </div>
         )}
 
-        {/* Step 3: Suppliers */}
+        {/* Step 3: Suppliers Grid */}
         {step === 3 && (
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8" data-testid="step-suppliers">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-heading font-bold text-slate-900">Suppliers</h2>
-              <Button onClick={addSupplier} variant="outline" data-testid="add-supplier-button">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Supplier
-              </Button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+              <div>
+                <h2 className="text-2xl font-heading font-bold text-slate-900">Supplier Invitation Grid</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Invite suppliers manually or bulk paste/upload. <br />
+                  <span className="font-semibold text-slate-600">Format:</span> Supplier Name, Company Name, Email, Mobile, GST No, MSME, Approved (Yes/No), Remarks
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" onClick={() => document.getElementById('supplier-csv-upload').click()}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload CSV
+                </Button>
+                <input
+                  type="file"
+                  id="supplier-csv-upload"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleSupplierFileUpload}
+                />
+
+                <Button variant="outline" onClick={addSupplier}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Row
+                </Button>
+              </div>
             </div>
 
-            <div className="space-y-6">
-              {suppliers.map((supplier, index) => (
-                <div key={index} className="border border-slate-200 rounded-lg p-6 relative" data-testid={`supplier-${index}`}>
-                  {suppliers.length > 1 && (
-                    <button
-                      onClick={() => removeSupplier(index)}
-                      className="absolute top-4 right-4 text-slate-400 hover:text-red-600"
-                      data-testid={`remove-supplier-${index}`}
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
+            <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-sm" onPaste={handlePasteSuppliers}>
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wide text-xs">
+                  <tr>
+                    <th className="px-3 py-3 font-semibold">Supplier Name</th>
+                    <th className="px-3 py-3 font-semibold w-1/5">Company Name *</th>
+                    <th className="px-3 py-3 font-semibold w-1/5">Email *</th>
+                    <th className="px-3 py-3 font-semibold">Mobile</th>
+                    <th className="px-3 py-3 font-semibold">GST No</th>
+                    <th className="px-3 py-3 font-semibold w-24">MSME</th>
+                    <th className="px-3 py-3 font-semibold w-24 text-center">Approved Vendor</th>
+                    <th className="px-3 py-3 font-semibold w-48">Remarks</th>
+                    <th className="px-2 py-3 font-semibold w-12 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {suppliers.map((supplier, index) => {
+                    const isNameMissing = step === 3 && !supplier.name;
+                    const isEmailMissing = step === 3 && !supplier.email;
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Company Name *
-                      </Label>
-                      <Input
-                        value={supplier.name}
-                        onChange={(e) => updateSupplier(index, 'name', e.target.value)}
-                        placeholder="Supplier Inc."
-                        className="h-12"
-                      />
-                    </div>
+                    return (
+                      <tr key={index} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-1 py-2">
+                          <Input
+                            value={supplier.contact_person}
+                            onChange={(e) => updateSupplier(index, 'contact_person', e.target.value)}
+                            placeholder="Supplier Name"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            value={supplier.name}
+                            onChange={(e) => updateSupplier(index, 'name', e.target.value)}
+                            placeholder="Company Name"
+                            className={`h-9 text-sm ${isNameMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            type="email"
+                            value={supplier.email}
+                            onChange={(e) => updateSupplier(index, 'email', e.target.value)}
+                            placeholder="email@domain.com"
+                            className={`h-9 text-sm ${isEmailMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            value={supplier.phone}
+                            onChange={(e) => updateSupplier(index, 'phone', e.target.value)}
+                            placeholder="Mobile"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            value={supplier.gst_no}
+                            onChange={(e) => updateSupplier(index, 'gst_no', e.target.value)}
+                            placeholder="GST"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <select
+                            value={supplier.msme}
+                            onChange={(e) => updateSupplier(index, 'msme', e.target.value)}
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          >
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                          </select>
+                        </td>
+                        <td className="px-1 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={supplier.approved_vendor}
+                            onChange={(e) => updateSupplier(index, 'approved_vendor', e.target.checked)}
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            value={supplier.remarks}
+                            onChange={(e) => updateSupplier(index, 'remarks', e.target.value)}
+                            placeholder="Remarks"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-2 text-center">
+                          {suppliers.length > 1 && (
+                            <button
+                              onClick={() => removeSupplier(index)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Contact Person
-                      </Label>
-                      <Input
-                        value={supplier.contact_person}
-                        onChange={(e) => updateSupplier(index, 'contact_person', e.target.value)}
-                        placeholder="John Doe"
-                        className="h-12"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Email *
-                      </Label>
-                      <Input
-                        type="email"
-                        value={supplier.email}
-                        onChange={(e) => updateSupplier(index, 'email', e.target.value)}
-                        placeholder="supplier@company.com"
-                        className="h-12"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Phone
-                      </Label>
-                      <Input
-                        value={supplier.phone}
-                        onChange={(e) => updateSupplier(index, 'phone', e.target.value)}
-                        placeholder="+1 234 567 8900"
-                        className="h-12"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-4 p-4 rounded-lg bg-blue-50/50 border border-blue-100 flex items-start gap-3">
+              <Copy className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <span className="font-semibold block mb-1">Grid Support Enabled!</span>
+                You can easily copy data from Excel (with matching 8 columns) and press <kbd className="px-1.5 py-0.5 bg-white border border-blue-200 rounded text-xs">Ctrl+V</kbd> anywhere inside this table box to instantly paste multiple suppliers.
+              </div>
             </div>
           </div>
         )}
