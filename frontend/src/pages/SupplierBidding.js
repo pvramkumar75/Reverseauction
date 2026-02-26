@@ -101,13 +101,15 @@ const SupplierBidding = () => {
 
       setAuction({ ...auctionData, current_l1: l1Bid, bids_count: allBids.length });
 
-      if (!itemBids.length || itemBids.every(b => b.unit_price === 0)) {
-        const initialBids = response.data.items.map((item) => ({
-          item_code: item.item_code,
-          unit_price: 0,
-        }));
-        setItemBids(initialBids);
-      }
+      setItemBids((prev) => {
+        if (!prev || prev.length === 0) {
+          return response.data.items.map((item) => ({
+            item_code: item.item_code,
+            unit_price: 0,
+          }));
+        }
+        return prev;
+      });
     } catch (error) {
       toast.error('Failed to load auction');
     } finally {
@@ -560,12 +562,12 @@ const SupplierBidding = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-4">
+            <div className="sticky bottom-4 z-50 flex items-center justify-center gap-4 bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-slate-700 mt-8 mx-auto max-w-2xl">
               <Button
                 type="submit"
                 disabled={submitting || concluded}
                 size="lg"
-                className="h-14 px-12 text-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                className="h-14 px-12 text-lg font-bold shadow-lg bg-emerald-500 hover:bg-emerald-600 text-white transition-all transform hover:scale-105"
                 data-testid="submit-bid-button"
               >
                 {submitting ? 'Submitting...' : currentBid ? 'Update Bid' : 'Submit Bid'}
@@ -576,7 +578,7 @@ const SupplierBidding = () => {
                   type="button"
                   variant="outline"
                   onClick={handleConclude}
-                  className="h-14 px-8 text-lg font-medium border-slate-300 text-slate-600 hover:bg-slate-100"
+                  className="h-14 px-8 text-lg font-bold border-rose-500 text-rose-500 hover:bg-rose-500 hover:text-white transition-all"
                 >
                   <Ban className="w-5 h-5 mr-2" />
                   Conclude Bidding

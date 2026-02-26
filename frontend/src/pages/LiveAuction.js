@@ -22,6 +22,12 @@ const LiveAuction = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [bidHistory, setBidHistory] = useState([]);
 
+  // Smart price formatting — no decimals if whole number
+  const fmtPrice = (val) => {
+    if (val == null) return '0';
+    return Number.isInteger(val) ? val.toLocaleString('en-IN') : val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   useEffect(() => {
     fetchAuction();
     fetchBids();
