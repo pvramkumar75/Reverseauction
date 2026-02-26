@@ -371,12 +371,18 @@ const SupplierBidding = () => {
         )}
 
         {auction.status === 'completed' && (
-          <div className="bg-slate-100 border border-slate-300 rounded-xl p-6 mb-8">
+          <div className={`border rounded-xl p-6 mb-8 ${rank === 1 ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-100 border-slate-300'}`}>
             <div className="flex items-start gap-3">
-              <Ban className="w-6 h-6 text-slate-600 mt-1" />
+              {rank === 1 ? <Trophy className="w-8 h-8 text-emerald-600 mt-1 animate-bounce" /> : <Ban className="w-6 h-6 text-slate-600 mt-1" />}
               <div>
-                <h3 className="text-lg font-heading font-bold text-slate-800 mb-1">Auction Ended</h3>
-                <p className="text-slate-600">This auction has been completed. No further bids are accepted.</p>
+                <h3 className={`text-xl font-heading font-bold mb-1 ${rank === 1 ? 'text-emerald-800' : 'text-slate-800'}`}>
+                  {rank === 1 ? 'Congratulations! You Won the Auction!' : 'Auction Ended'}
+                </h3>
+                <p className={`text-lg ${rank === 1 ? 'text-emerald-700 font-medium' : 'text-slate-600'}`}>
+                  {rank === 1
+                    ? 'Your bid was ranked L1! A formal Purchase Order (PO) shall be sent to you soon.'
+                    : 'This auction has been completed. No further bids are accepted.'}
+                </p>
               </div>
             </div>
           </div>

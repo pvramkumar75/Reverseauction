@@ -3,9 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '@/utils/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info, StopCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info, StopCircle, Download } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { formatDistanceToNow } from 'date-fns';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import html2canvas from 'html2canvas';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -182,6 +186,110 @@ const LiveAuction = () => {
     toast.success('Link copied to clipboard!');
   };
 
+  const downloadAuditReport = async () => {
+    if (!auction || bidHistory.length === 0) {
+      toast.error('Cannot generate report: No bids available.');
+      return;
+    }
+
+    const doc = new jsPDF();
+
+    // Document Header
+    doc.setFontSize(22);
+    doc.setTextColor(33, 37, 41);
+    doc.text('BidFlow - Reverse Auction Audit Report', 14, 20);
+
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Auction ID: ${auction.id}`, 14, 30);
+    doc.text(`Title: ${auction.title}`, 14, 36);
+    doc.text(`Reference No: ${auction.reference_number || 'N/A'}`, 14, 42);
+    const dateStr = new Date().toLocaleString('en-IN');
+    doc.text(`Report Generated On: ${dateStr}`, 14, 48);
+
+    // Summary Section
+    const startPrice = auction.config?.start_price || 0;
+    const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+    const totalEstimated = startPrice * totalQty;
+
+    const l1Bid = auction.current_l1 || totalEstimated;
+    const savings = Math.max(0, totalEstimated - l1Bid);
+    const savingsPercent = totalEstimated > 0 ? ((savings / totalEstimated) * 100).toFixed(2) : '0';
+
+    doc.setFontSize(14);
+    doc.setTextColor(33, 37, 41);
+    doc.text('Auction Summary', 14, 60);
+
+    doc.autoTable({
+      startY: 65,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Suppliers Invited', `${(auction.suppliers || []).length}`],
+        ['Total Bids Received', `${bids.length}`],
+        ['Ceiling Price (Start)', `Rs. ${totalEstimated.toLocaleString('en-IN')}`],
+        ['Final L1 Bid', `Rs. ${l1Bid.toLocaleString('en-IN')}`],
+        ['Total Savings', `Rs. ${savings.toLocaleString('en-IN')} (${savingsPercent}%)`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+
+    let nextY = doc.previousAutoTable.finalY || 65;
+
+    // Capture Chart if exists
+    const chartElem = document.getElementById('bids-trend-chart');
+    if (chartElem) {
+      try {
+        const canvas = await html2canvas(chartElem, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        doc.setFontSize(14);
+        doc.setTextColor(33, 37, 41);
+        doc.text('L1 Trend Chart', 14, nextY + 15);
+        doc.addImage(imgData, 'PNG', 14, nextY + 20, 180, 80);
+        nextY += 105;
+      } catch (err) {
+        console.error("Failed to capture chart", err);
+      }
+    }
+
+    // Check page break
+    if (nextY > 250) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    doc.setFontSize(14);
+    doc.setTextColor(33, 37, 41);
+    doc.text('Comprehensive Bidding History', 14, nextY + 15);
+
+    const tableData = bidHistory.map(entry => {
+      const ts = new Date(entry.timestamp);
+      return [
+        entry.round,
+        ts.toLocaleString('en-IN'),
+        entry.supplier_name,
+        `Rs. ${fmtPrice(entry.unit_price_avg)}`,
+        `Rs. ${fmtPrice(entry.total_amount)}`,
+        entry.decrement > 0 ? `Rs. ${fmtPrice(entry.decrement)}` : '-',
+        `Rs. ${fmtPrice(entry.l1_unit_price)}`,
+        entry.l1_supplier
+      ];
+    });
+
+    doc.autoTable({
+      startY: nextY + 20,
+      head: [['Rnd', 'Time', 'Supplier', 'Unit', 'Total Amount', 'Drop', 'L1 After', 'L1 Supplier']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85] },
+      styles: { fontSize: 8 },
+    });
+
+    // Save
+    doc.save(`BidFlow-Audit-Report-${auction.reference_number || auction.id}.pdf`);
+    toast.success('Audit Report downloaded successfully!');
+  };
+
   const getRankBadge = (rank) => {
     if (rank === 1) {
       return 'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 font-mono';
@@ -208,6 +316,16 @@ const LiveAuction = () => {
     );
   }
 
+  // Chart Data Preparation
+  const chartData = [...bidHistory].reverse().map((bid, index) => {
+    return {
+      name: `Bid ${index + 1}`,
+      l1_price: bid.l1_unit_price,
+      supplier: bid.l1_supplier,
+      amount: bid.total_amount,
+    };
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-white border-b border-slate-100 shadow-sm">
@@ -228,8 +346,15 @@ const LiveAuction = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6" data-testid="status-card">
-            <div className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
-              Status
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+                Status
+              </div>
+              {auction.status === 'completed' && (
+                <Button onClick={downloadAuditReport} size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 px-3 text-xs text-white">
+                  <Download className="w-3 h-3 mr-1" /> Audit Report
+                </Button>
+              )}
             </div>
             <div className="text-2xl font-heading font-bold text-slate-900">
               {auction.status === 'draft' && 'Draft'}
@@ -465,6 +590,33 @@ const LiveAuction = () => {
             </div>
           )}
         </div>
+
+        {bidHistory.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8 mb-8" id="bids-trend-chart">
+            <h3 className="text-xl font-heading font-bold text-slate-900 mb-6">L1 Price Trend</h3>
+            <div className="h-80 w-full pr-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748B' }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tick={{ fontSize: 12, fill: '#64748B' }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `₹${value.toLocaleString('en-IN')}`}
+                  />
+                  <RechartsTooltip
+                    formatter={(value, name) => [`₹${value.toLocaleString('en-IN')}`, 'L1 Unit Price']}
+                    labelStyle={{ color: '#0F172A', fontWeight: 'bold' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Line type="monotone" dataKey="l1_price" stroke="#4F46E5" strokeWidth={3} dot={{ r: 4, fill: '#4F46E5', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
