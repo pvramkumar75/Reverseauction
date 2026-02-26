@@ -137,6 +137,12 @@ const SupplierBidding = () => {
     }
   };
 
+  // Smart price formatting — no decimals if whole number
+  const fmtPrice = (val) => {
+    if (val == null) return '0';
+    return Number.isInteger(val) ? val.toLocaleString('en-IN') : val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const updateItemBid = (index, value) => {
     const updated = [...itemBids];
     updated[index].unit_price = parseFloat(value) || 0;
@@ -171,13 +177,17 @@ const SupplierBidding = () => {
       if (unitPrice >= startPrice) {
         return `Unit price (₹${unitPrice}) must be lower than ceiling price (₹${startPrice}/unit)`;
       }
-      // Check multiples
+      // Check multiples using integer math (cents) to avoid floating point issues
       if (minDecrement > 0) {
-        const diff = parseFloat((startPrice - unitPrice).toFixed(4));
-        const remainder = parseFloat((diff % minDecrement).toFixed(4));
-        const epsilon = 0.01;
-        if (remainder > epsilon && Math.abs(remainder - minDecrement) > epsilon) {
-          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${(startPrice - minDecrement).toFixed(2)}, ₹${(startPrice - 2 * minDecrement).toFixed(2)}, ₹${(startPrice - 3 * minDecrement).toFixed(2)}...`;
+        const startCents = Math.round(startPrice * 100);
+        const priceCents = Math.round(unitPrice * 100);
+        const decrementCents = Math.round(minDecrement * 100);
+        const diffCents = startCents - priceCents;
+        if (diffCents <= 0 || diffCents % decrementCents !== 0) {
+          const v1 = startPrice - minDecrement;
+          const v2 = startPrice - 2 * minDecrement;
+          const v3 = startPrice - 3 * minDecrement;
+          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${fmtPrice(v1)}, ₹${fmtPrice(v2)}, ₹${fmtPrice(v3)}...`;
         }
       }
       // Check vs L1
@@ -405,7 +415,7 @@ const SupplierBidding = () => {
                   Current L1 Price (per unit)
                 </div>
                 <div className="text-4xl font-mono font-bold text-emerald-400">
-                  ₹{currentL1Unit !== null ? currentL1Unit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : startPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{fmtPrice(currentL1Unit !== null ? currentL1Unit : startPrice)}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
                   {currentL1Unit !== null
@@ -419,9 +429,9 @@ const SupplierBidding = () => {
                   Your Target Unit Price
                 </div>
                 <div className="text-2xl font-mono font-bold text-white">
-                  ≤ ₹{currentL1Unit !== null
-                    ? (currentL1Unit - minDecrement).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-                    : (startPrice - minDecrement).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ≤ ₹{fmtPrice(currentL1Unit !== null
+                    ? (currentL1Unit - minDecrement)
+                    : (startPrice - minDecrement))}
                 </div>
                 <div className="mt-2 text-xs text-slate-400 italic">
                   Min decrement: ₹{minDecrement}/unit. Bid must be in multiples of ₹{minDecrement}.
@@ -451,10 +461,10 @@ const SupplierBidding = () => {
                       </Label>
                       <Input
                         type="number"
-                        step="0.01"
+                        step={Number.isInteger(minDecrement) ? '1' : String(minDecrement)}
                         value={itemBids[idx]?.unit_price || ''}
                         onChange={(e) => updateItemBid(idx, e.target.value)}
-                        placeholder="0.00"
+                        placeholder={Number.isInteger(minDecrement) ? '0' : '0.00'}
                         className="h-12 font-mono text-lg"
                         required
                       />

@@ -524,12 +524,15 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
                 detail=f"Unit price (₹{unit_price}) must be lower than ceiling price (₹{start_price}/unit)"
             )
         # Must be a valid multiple of min_decrement below start_price
+        # Use integer math (cents) to avoid floating point issues
         if min_decrement > 0:
-            diff_from_start = round(start_price - unit_price, 4)
-            remainder = round(diff_from_start % min_decrement, 4)
-            # Use epsilon tolerance for floating point comparison
-            epsilon = 0.01
-            if remainder > epsilon and abs(remainder - min_decrement) > epsilon:
+            # Convert to integer cents (multiply by 100)
+            start_cents = round(start_price * 100)
+            price_cents = round(unit_price * 100)
+            decrement_cents = round(min_decrement * 100)
+            
+            diff_cents = start_cents - price_cents
+            if diff_cents <= 0 or diff_cents % decrement_cents != 0:
                 valid1 = round(start_price - min_decrement, 2)
                 valid2 = round(start_price - 2 * min_decrement, 2)
                 valid3 = round(start_price - 3 * min_decrement, 2)

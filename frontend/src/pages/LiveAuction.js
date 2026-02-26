@@ -430,7 +430,7 @@ const LiveAuction = () => {
                         </td>
                         <td className="py-3 px-3 font-medium text-slate-900">{entry.supplier_name}</td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
-                          ₹{entry.unit_price_avg?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Number.isInteger(entry.unit_price_avg) ? entry.unit_price_avg?.toLocaleString('en-IN') : entry.unit_price_avg?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-3 text-right font-mono text-slate-700">
                           ₹{entry.total_amount?.toLocaleString('en-IN')}
@@ -445,7 +445,7 @@ const LiveAuction = () => {
                           )}
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
-                          ₹{entry.l1_unit_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Number.isInteger(entry.l1_unit_price) ? entry.l1_unit_price?.toLocaleString('en-IN') : entry.l1_unit_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-3 text-slate-700">
                           {entry.l1_supplier}
