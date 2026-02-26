@@ -98,9 +98,17 @@ const SupplierBidding = () => {
       // Fetch latest bids to find L1 for the supplier visibility
       const bidsResponse = await api.get(`/auctions/${auctionData.id}/bids`);
       const allBids = bidsResponse.data;
+
+      // Calculate overall L1
       const l1Bid = allBids.length > 0 ? Math.min(...allBids.map(b => b.total_amount)) : null;
 
-      setAuction({ ...auctionData, current_l1: l1Bid, bids_count: allBids.length });
+      // Calculate item-wise L1s — find the lowest unit price for each item index across all suppliers
+      const itemL1s = (auctionData.items || []).map((item, idx) => {
+        const prices = allBids.map(b => b.item_bids[idx]?.unit_price).filter(p => p > 0);
+        return prices.length > 0 ? Math.min(...prices) : null;
+      });
+
+      setAuction({ ...auctionData, current_l1: l1Bid, item_l1s: itemL1s, bids_count: allBids.length });
 
       setItemBids((prev) => {
         if (!prev || prev.length === 0) {
@@ -487,6 +495,7 @@ const SupplierBidding = () => {
                         <th className="px-4 py-3 font-semibold text-center w-20">Unit</th>
                         <th className="px-4 py-3 font-semibold text-right w-24" title="Ceiling Price">Ceiling</th>
                         <th className="px-4 py-3 font-semibold text-right w-24" title="Min Decrement">Decr</th>
+                        <th className="px-4 py-3 font-semibold text-right w-24 text-emerald-600">L1 Unit</th>
                         <th className="px-4 py-3 font-semibold text-right w-32">Your Price</th>
                         <th className="px-4 py-3 font-semibold text-right w-36">Line Total</th>
                       </tr>
@@ -500,6 +509,9 @@ const SupplierBidding = () => {
                           <td className="px-2 py-3 text-center text-slate-700 text-xs">{item.unit || 'PCS'}</td>
                           <td className="px-2 py-3 text-right font-mono text-slate-500">₹{(item.start_price || 0).toLocaleString('en-IN')}</td>
                           <td className="px-2 py-3 text-right font-mono text-slate-500">₹{(item.min_decrement || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-2 py-3 text-right font-mono font-bold text-emerald-600 bg-emerald-50/50">
+                            {auction.item_l1s?.[idx] ? `₹${auction.item_l1s[idx].toLocaleString('en-IN')}` : '—'}
+                          </td>
                           <td className="px-2 py-2">
                             <Input
                               type="number"
