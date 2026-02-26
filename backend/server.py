@@ -798,17 +798,17 @@ app = socketio.ASGIApp(sio, fastapi_app)
 
 @fastapi_app.on_event("startup")
 async def startup():
+    from sqlalchemy import text as sa_text
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Migrate: add bid_history column if missing (for existing databases)
         try:
-            await conn.execute(
-                __import__('sqlalchemy').text(
-                    "ALTER TABLE auctions ADD COLUMN bid_history TEXT DEFAULT '[]'"
-                )
-            )
-        except Exception:
-            pass  # Column already exists
+            await conn.execute(sa_text(
+                "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS bid_history TEXT DEFAULT '[]'"
+            ))
+            logging.info("Migration: bid_history column ensured on auctions table")
+        except Exception as e:
+            logging.warning(f"Migration note (safe to ignore): {e}")
 
 if __name__ == "__main__":
     import uvicorn
