@@ -46,7 +46,9 @@ const CreateAuction = () => {
   };
 
   const handleConfigChange = (e) => {
-    setConfig({ ...config, [e.target.name]: parseFloat(e.target.value) || 0 });
+    const { name, value } = e.target;
+    const parsed = Math.round(parseFloat(value) * 100) / 100 || 0; // Round to 2 decimals
+    setConfig(prev => ({ ...prev, [name]: parsed }));
   };
 
   const addItem = () => {
@@ -90,6 +92,7 @@ const CreateAuction = () => {
         suppliers,
         config,
       };
+      console.log('Creating auction with config:', JSON.stringify(config));
       const response = await api.post('/auctions', payload);
       toast.success('Auction created successfully!');
       navigate(`/auctions/${response.data.id}`);
