@@ -121,21 +121,25 @@ const SupplierPortal = () => {
                     <div className="text-sm text-slate-600">{item.description}</div>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
                   <div>
                     <span className="text-slate-500">Quantity:</span>
                     <span className="ml-2 font-semibold text-slate-900">
                       {item.quantity} {item.unit}
                     </span>
                   </div>
-                  {item.estimated_price > 0 && (
-                    <div>
-                      <span className="text-slate-500">Est. Price:</span>
-                      <span className="ml-2 font-mono font-semibold text-slate-900">
-                        ₹{item.estimated_price.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-slate-500">Ceiling:</span>
+                    <span className="ml-2 font-mono font-semibold text-slate-900">
+                      ₹{(item.start_price || item.estimated_price || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Min Decr:</span>
+                    <span className="ml-2 font-mono font-semibold text-slate-900">
+                      ₹{(item.min_decrement || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -149,15 +153,19 @@ const SupplierPortal = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Starting Price</span>
+              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Starting Ceiling</span>
               <p className="text-2xl font-mono font-bold text-slate-900">
-                ₹{(auction.config?.start_price || 0).toLocaleString('en-IN')}
+                {auction.config?.start_price > 0
+                  ? `₹${auction.config.start_price.toLocaleString('en-IN')}`
+                  : 'Item-wise'}
               </p>
             </div>
             <div>
               <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Min. Decrement</span>
               <p className="text-2xl font-mono font-bold text-slate-900">
-                ₹{(auction.config?.min_decrement || 0).toLocaleString('en-IN')}
+                {auction.config?.min_decrement > 0
+                  ? `₹${auction.config.min_decrement.toLocaleString('en-IN')}`
+                  : 'Item-wise'}
               </p>
             </div>
             <div>

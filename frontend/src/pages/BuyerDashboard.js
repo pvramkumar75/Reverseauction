@@ -126,7 +126,15 @@ const BuyerDashboard = () => {
                   </div>
                   <div className="flex items-center text-slate-600">
                     <IndianRupee className="w-4 h-4 mr-2 text-slate-400" />
-                    <span className="font-mono">Start: ₹{(auction.config?.start_price || 0).toLocaleString('en-IN')}</span>
+                    <span className="font-mono">
+                      Ceiling: ₹{(() => {
+                        const globalStart = auction.config?.start_price || 0;
+                        if (globalStart > 0) return globalStart.toLocaleString('en-IN');
+                        // Sum of item wise ceilings
+                        const totalCeiling = (auction.items || []).reduce((sum, item) => sum + ((item.start_price || 0) * (item.quantity || 0)), 0);
+                        return totalCeiling.toLocaleString('en-IN');
+                      })()}
+                    </span>
                   </div>
                   <div className="flex items-center text-slate-600">
                     <Clock className="w-4 h-4 mr-2 text-slate-400" />

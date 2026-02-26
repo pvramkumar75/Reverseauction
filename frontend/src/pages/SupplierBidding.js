@@ -175,41 +175,46 @@ const SupplierBidding = () => {
 
   // Frontend pre-validation before API call
   const validateBidLocally = () => {
-    const startPrice = auction.config?.start_price || 0;
-    const minDecrement = auction.config?.min_decrement || 0;
-    const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
-    const currentL1Unit = auction.current_l1 ? (auction.current_l1 / totalQty) : startPrice;
-
     for (let i = 0; i < itemBids.length; i++) {
+      const item = (auction.items || [])[i];
+      if (!item) continue;
+
       const unitPrice = itemBids[i]?.unit_price || 0;
+      const itemCeiling = item.start_price || auction.config?.start_price || 0;
+      const itemMinDecr = item.min_decrement || auction.config?.min_decrement || 0;
 
       if (unitPrice <= 0) {
-        return `Please enter a valid unit price for ${auction.items[i]?.item_code || `Item ${i + 1}`}`;
+        return `Please enter a valid unit price for ${item.item_code || `Item ${i + 1}`}`;
       }
-      if (unitPrice >= startPrice) {
-        return `Unit price (₹${unitPrice}) must be lower than ceiling price (₹${startPrice}/unit)`;
+
+      if (itemCeiling > 0 && unitPrice >= itemCeiling) {
+        return `${item.item_code}: Unit price (₹${unitPrice}) must be lower than ceiling (₹${itemCeiling}/unit)`;
       }
-      // Check multiples using integer math (cents) to avoid floating point issues
-      if (minDecrement > 0) {
-        const startCents = Math.round(startPrice * 100);
+
+      // Check multiples using integer math (cents)
+      if (itemMinDecr > 0 && itemCeiling > 0) {
+        const startCents = Math.round(itemCeiling * 100);
         const priceCents = Math.round(unitPrice * 100);
-        const decrementCents = Math.round(minDecrement * 100);
+        const decrementCents = Math.round(itemMinDecr * 100);
         const diffCents = startCents - priceCents;
         if (diffCents <= 0 || diffCents % decrementCents !== 0) {
-          const v1 = startPrice - minDecrement;
-          const v2 = startPrice - 2 * minDecrement;
-          const v3 = startPrice - 3 * minDecrement;
-          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${fmtPrice(v1)}, ₹${fmtPrice(v2)}, ₹${fmtPrice(v3)}...`;
+          const v1 = itemCeiling - itemMinDecr;
+          return `${item.item_code}: Unit price must be a multiple of ₹${itemMinDecr} below ceiling (₹${itemCeiling}). Valid: ₹${fmtPrice(v1)}, ₹${fmtPrice(v1 - itemMinDecr)}...`;
         }
       }
-      // Check vs L1
-      if (auction.current_l1) {
-        const maxAllowed = currentL1Unit - minDecrement;
-        if (unitPrice > maxAllowed) {
-          return `Unit price (₹${unitPrice}) must be at least ₹${minDecrement} lower than current L1 (₹${currentL1Unit.toFixed(2)}/unit). Max: ₹${maxAllowed.toFixed(2)}/unit`;
-        }
+
+      // Check vs L1 for this specific item if possible?
+      // Actually current schema stores a single total L1. 
+      // The L1 check is usually on the total amount.
+    }
+
+    if (auction.current_l1) {
+      const totalMinDecr = (auction.items || []).reduce((sum, item) => sum + (item.min_decrement || auction.config?.min_decrement || 0) * (item.quantity || 0), 0) || 1;
+      if (totalAmount > (auction.current_l1 - totalMinDecr)) {
+        return `Total bid (₹${totalAmount.toLocaleString('en-IN')}) must be at least ₹${totalMinDecr.toLocaleString('en-IN')} lower than current L1 total (₹${auction.current_l1.toLocaleString('en-IN')})`;
       }
     }
+
     return null; // Valid
   };
 
@@ -348,12 +353,16 @@ const SupplierBidding = () => {
               <div className="font-medium text-slate-900">{auction.freight_condition || '-'}</div>
             </div>
             <div>
-              <div className="text-slate-500 font-semibold uppercase text-xs">Ceiling Price</div>
-              <div className="font-mono font-bold text-slate-900">₹{startPrice}/unit</div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Total Ceiling</div>
+              <div className="font-mono font-bold text-slate-900">
+                ₹{(auction.items || []).reduce((sum, it) => sum + (it.start_price || auction.config?.start_price || 0) * (it.quantity || 0), 0).toLocaleString('en-IN')}
+              </div>
             </div>
             <div>
-              <div className="text-slate-500 font-semibold uppercase text-xs">Min Decrement</div>
-              <div className="font-mono font-bold text-slate-900">₹{minDecrement}/unit</div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Total Min Decr</div>
+              <div className="font-mono font-bold text-slate-900">
+                ₹{(auction.items || []).reduce((sum, it) => sum + (it.min_decrement || auction.config?.min_decrement || 0) * (it.quantity || 0), 0).toLocaleString('en-IN')}
+              </div>
             </div>
           </div>
         </div>
@@ -433,26 +442,29 @@ const SupplierBidding = () => {
                   Current L1 Price (per unit)
                 </div>
                 <div className="text-4xl font-mono font-bold text-emerald-400">
-                  ₹{fmtPrice(currentL1Unit !== null ? currentL1Unit : startPrice)}
+                  ₹{(auction.current_l1 || (auction.items || []).reduce((sum, it) => sum + (it.start_price || 0) * (it.quantity || 0), 0)).toLocaleString('en-IN')}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {currentL1Unit !== null
-                    ? `L1 Total: ₹${auction.current_l1.toLocaleString('en-IN')} (${totalQty} units) | ${auction.bids_count} bid(s) placed`
-                    : `No bids yet. Ceiling: ₹${startPrice}/unit`}
+                  {auction.current_l1
+                    ? `Total Amount | ${auction.bids_count} bid(s) placed`
+                    : `No bids yet. Total Ceiling: ₹${(auction.items || []).reduce((sum, it) => sum + (it.start_price || 0) * (it.quantity || 0), 0).toLocaleString('en-IN')}`}
                 </div>
               </div>
               <div className="h-full border-l border-slate-700 hidden md:block" />
               <div>
                 <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">
-                  Your Target Unit Price
+                  Your Target Total Price
                 </div>
                 <div className="text-2xl font-mono font-bold text-white">
-                  ≤ ₹{fmtPrice(currentL1Unit !== null
-                    ? (currentL1Unit - minDecrement)
-                    : (startPrice - minDecrement))}
+                  {(() => {
+                    const totalCeiling = (auction.items || []).reduce((sum, it) => sum + (it.start_price || 0) * (it.quantity || 0), 0);
+                    const totalMinDecr = (auction.items || []).reduce((sum, it) => sum + (it.min_decrement || 0) * (it.quantity || 0), 0);
+                    const currentL1 = auction.current_l1 || totalCeiling;
+                    return `≤ ₹${(currentL1 - totalMinDecr).toLocaleString('en-IN')}`;
+                  })()}
                 </div>
                 <div className="mt-2 text-xs text-slate-400 italic">
-                  Min decrement: ₹{minDecrement}/unit. Bid must be in multiples of ₹{minDecrement}.
+                  Overall min decrement is the sum of item decrements.
                 </div>
               </div>
             </div>
@@ -471,9 +483,11 @@ const SupplierBidding = () => {
                       <tr>
                         <th className="px-4 py-3 font-semibold">Item Code</th>
                         <th className="px-4 py-3 font-semibold w-1/3">Description</th>
-                        <th className="px-4 py-3 font-semibold text-center w-24">Qty</th>
+                        <th className="px-4 py-3 font-semibold text-center w-20">Qty</th>
                         <th className="px-4 py-3 font-semibold text-center w-20">Unit</th>
-                        <th className="px-4 py-3 font-semibold text-right w-40">Your Unit Price (₹)</th>
+                        <th className="px-4 py-3 font-semibold text-right w-24" title="Ceiling Price">Ceiling</th>
+                        <th className="px-4 py-3 font-semibold text-right w-24" title="Min Decrement">Decr</th>
+                        <th className="px-4 py-3 font-semibold text-right w-32">Your Price</th>
                         <th className="px-4 py-3 font-semibold text-right w-36">Line Total</th>
                       </tr>
                     </thead>
@@ -482,16 +496,18 @@ const SupplierBidding = () => {
                         <tr key={idx} className="hover:bg-slate-50 transition-colors" data-testid={`item-bid-${idx}`}>
                           <td className="px-4 py-3 font-bold text-slate-900">{item.item_code}</td>
                           <td className="px-4 py-3 text-slate-600">{item.description}</td>
-                          <td className="px-4 py-3 text-center text-slate-700">{item.quantity || 0}</td>
-                          <td className="px-4 py-3 text-center text-slate-700">{item.unit || 'PCS'}</td>
-                          <td className="px-4 py-2">
+                          <td className="px-2 py-3 text-center text-slate-700">{item.quantity || 0}</td>
+                          <td className="px-2 py-3 text-center text-slate-700 text-xs">{item.unit || 'PCS'}</td>
+                          <td className="px-2 py-3 text-right font-mono text-slate-500">₹{(item.start_price || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-2 py-3 text-right font-mono text-slate-500">₹{(item.min_decrement || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-2 py-2">
                             <Input
                               type="number"
-                              step={Number.isInteger(minDecrement) ? '1' : String(minDecrement)}
+                              step={(item.min_decrement || 1) % 1 === 0 ? '1' : '0.01'}
                               value={itemBids[idx]?.unit_price || ''}
                               onChange={(e) => updateItemBid(idx, e.target.value)}
-                              placeholder={Number.isInteger(minDecrement) ? '0' : '0.00'}
-                              className="h-10 text-right font-mono text-base border-slate-300 focus-visible:ring-indigo-500"
+                              placeholder="0"
+                              className="h-10 text-right font-mono text-base border-slate-300 focus-visible:ring-indigo-500 bg-emerald-50/30"
                               required
                             />
                           </td>

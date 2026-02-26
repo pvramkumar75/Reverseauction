@@ -210,9 +210,7 @@ const LiveAuction = () => {
     doc.text(`Report Generated On: ${dateStr}`, 14, 48);
 
     // Summary Section
-    const startPrice = auction.config?.start_price || 0;
-    const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
-    const totalEstimated = startPrice * totalQty;
+    const totalEstimated = (auction.items || []).reduce((sum, item) => sum + ((item.start_price || 0) * (item.quantity || 0)), 0) || 0;
 
     const l1Bid = auction.current_l1 || totalEstimated;
     const savings = Math.max(0, totalEstimated - l1Bid);
@@ -228,7 +226,7 @@ const LiveAuction = () => {
       body: [
         ['Total Suppliers Invited', `${(auction.suppliers || []).length}`],
         ['Total Bids Received', `${bids.length}`],
-        ['Ceiling Price (Start)', `Rs. ${totalEstimated.toLocaleString('en-IN')}`],
+        ['Total Auction Ceiling', `Rs. ${totalEstimated.toLocaleString('en-IN')}`],
         ['Final L1 Bid', `Rs. ${l1Bid.toLocaleString('en-IN')}`],
         ['Total Savings', `Rs. ${savings.toLocaleString('en-IN')} (${savingsPercent}%)`],
       ],
@@ -387,8 +385,7 @@ const LiveAuction = () => {
               Total Savings
             </div>
             {(() => {
-              const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
-              const totalEstimated = (auction.config?.start_price || 0) * totalQty;
+              const totalEstimated = (auction.items || []).reduce((sum, item) => sum + ((item.start_price || 0) * (item.quantity || 0)), 0) || 0;
               const bestBidTotal = bids.length > 0 ? Math.min(...bids.map(b => b.total_amount)) : totalEstimated;
               const savings = Math.max(0, totalEstimated - bestBidTotal);
               const savingsPercent = totalEstimated > 0 ? ((savings / totalEstimated) * 100).toFixed(1) : '0.0';
