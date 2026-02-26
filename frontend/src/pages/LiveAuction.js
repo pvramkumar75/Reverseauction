@@ -87,6 +87,7 @@ const LiveAuction = () => {
       newSocket.close();
       clearInterval(pollInterval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auctionId]);
 
   useEffect(() => {
@@ -109,6 +110,7 @@ const LiveAuction = () => {
     }, 1000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auction]);
 
   const fetchAuction = async () => {
