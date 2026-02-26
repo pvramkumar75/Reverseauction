@@ -133,7 +133,9 @@ class ItemSpec(BaseModel):
     description: str
     quantity: float
     unit: str
-    estimated_price: Optional[float] = None
+    estimated_price: float = 0.0
+    start_price: float = 0.0
+    min_decrement: float = 0.0
 
 class SupplierInfo(BaseModel):
     name: str
@@ -147,8 +149,8 @@ class SupplierInfo(BaseModel):
     token: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
 
 class AuctionConfig(BaseModel):
-    start_price: float
-    min_decrement: float
+    start_price: float = 0.0
+    min_decrement: float = 0.0
     duration_minutes: int
     buffer_minutes: int = 2
 
@@ -293,12 +295,17 @@ async def create_auction(auction_data: AuctionCreate, db: AsyncSession = Depends
         payment_terms=auction_data.payment_terms,
         delivery_terms=auction_data.delivery_terms,
         freight_condition=auction_data.freight_condition,
-        items=json.dumps([{**i.model_dump(), 'estimated_price': round(i.estimated_price or 0, 2)} for i in auction_data.items]),
+        items=json.dumps([{
+            **i.model_dump(), 
+            'estimated_price': round(i.estimated_price or 0, 2),
+            'start_price': round(getattr(i, 'start_price', i.estimated_price) or 0, 2),
+            'min_decrement': round(getattr(i, 'min_decrement', 0), 2)
+        } for i in auction_data.items]),
         suppliers=json.dumps([s.model_dump() for s in auction_data.suppliers]),
         config=json.dumps({
             **auction_data.config.model_dump(),
-            'start_price': round(auction_data.config.start_price, 2),
-            'min_decrement': round(auction_data.config.min_decrement, 2)
+            'start_price': round(getattr(auction_data.config, 'start_price', 0), 2),
+            'min_decrement': round(getattr(auction_data.config, 'min_decrement', 0), 2)
         }),
         status="draft"
     )
@@ -519,29 +526,34 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="Auction is not active")
     
     config = json.loads(auction.config)
-    min_decrement = config['min_decrement']
-    start_price = config['start_price']
+    global_min_decrement = config.get('min_decrement', 0)
+    global_start_price = config.get('start_price', 0)
+    
+    auction_items = json.loads(auction.items)
     
     # Validate each item's UNIT PRICE
-    for item_bid in bid_data.item_bids:
+    for i, item_bid in enumerate(bid_data.item_bids):
+        item_def = auction_items[i] if i < len(auction_items) else {}
+        start_price = item_def.get('start_price') or item_def.get('estimated_price') or global_start_price
+        min_decrement = item_def.get('min_decrement') or global_min_decrement
+
         unit_price = item_bid.get('unit_price', 0)
         # Must be below ceiling
         if unit_price >= start_price:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Unit price (₹{unit_price}) must be lower than ceiling price (₹{start_price}/unit)"
+                detail=f"Unit price (₹{unit_price}) for {item_def.get('item_code', 'item')} must be lower than ceiling price (₹{start_price}/unit)"
             )
         # Must be a valid multiple of min_decrement below start_price
         if min_decrement > 0:
             # If decrement is a whole number, force bid to be a whole number
-            # Using epsilon to check if it has any fractional part
             is_whole_decrement = abs(min_decrement - round(min_decrement)) < 0.0001
             if is_whole_decrement:
                 has_fraction = abs(unit_price - round(unit_price)) > 0.0001
                 if has_fraction:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Unit price (₹{unit_price}) must be a whole number because the minimum decrement (₹{min_decrement}) is a whole number."
+                        detail=f"Unit price (₹{unit_price}) for {item_def.get('item_code', 'item')} must be a whole number because the minimum decrement (₹{min_decrement}) is a whole number."
                     )
 
             # Use integer math (cents) to avoid floating point issues for all cases
@@ -556,7 +568,7 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
                 v3 = round(start_price - 3 * min_decrement, 2)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{v1}, ₹{v2}, ₹{v3}..."
+                    detail=f"Unit price (₹{unit_price}) for {item_def.get('item_code', 'item')} must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{v1}, ₹{v2}, ₹{v3}..."
                 )
     
     # Get current best bid (L1)
@@ -568,6 +580,9 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     if best_bid:
         best_item_bids = json.loads(best_bid.item_bids) if isinstance(best_bid.item_bids, str) else best_bid.item_bids
         for i, item_bid in enumerate(bid_data.item_bids):
+            item_def = auction_items[i] if i < len(auction_items) else {}
+            min_decrement = item_def.get('min_decrement') or global_min_decrement
+            
             unit_price = item_bid.get('unit_price', 0)
             if i < len(best_item_bids):
                 best_unit = best_item_bids[i].get('unit_price', 0)
@@ -623,9 +638,10 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     history = json.loads(auction.bid_history or '[]')
     
     # Calculate decrement from previous L1
-    prev_l1_unit = start_price  # default to ceiling
+    global_start_price = config.get('start_price', 0)
+    prev_l1_unit = global_start_price  # default to ceiling
     if len(history) > 0:
-        prev_l1_unit = history[-1].get('l1_unit_price', start_price)
+        prev_l1_unit = history[-1].get('l1_unit_price', global_start_price)
     
     items_info = json.loads(auction.items)
     total_qty = sum(it.get('quantity', 0) for it in items_info) or 1
@@ -656,7 +672,7 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
         else:
             current_l1_unit = current_l1_bid.total_amount / total_qty
     else:
-        current_l1_unit = start_price
+        current_l1_unit = global_start_price
 
     # Build per-item unit prices
     item_prices = []
@@ -666,8 +682,8 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
             'unit_price': ib.get('unit_price', 0)
         })
     
-    # If decrement is a whole number, force displays to be whole numbers
-    is_whole_decrement = abs(min_decrement - round(min_decrement)) < 0.0001
+    # For history purposes we track average decrement behavior roughly
+    is_whole_decrement = True
     
     history_entry = {
         'timestamp': now.isoformat(),

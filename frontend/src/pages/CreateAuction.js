@@ -28,7 +28,7 @@ const CreateAuction = () => {
   });
 
   const [items, setItems] = useState([
-    { item_code: '', description: '', quantity: 0, unit: 'PCS', estimated_price: 0 },
+    { item_code: '', description: '', quantity: 0, unit: 'PCS', estimated_price: 0, start_price: 0, min_decrement: 0 },
   ]);
 
   const [suppliers, setSuppliers] = useState([
@@ -63,7 +63,7 @@ const CreateAuction = () => {
 
   const updateItem = (index, field, value) => {
     const updated = [...items];
-    updated[index][field] = field === 'quantity' || field === 'estimated_price' ? parseFloat(value) || 0 : value;
+    updated[index][field] = ['quantity', 'estimated_price', 'start_price', 'min_decrement'].includes(field) ? parseFloat(value) || 0 : value;
     setItems(updated);
   };
 
@@ -82,7 +82,9 @@ const CreateAuction = () => {
         description: cells[1]?.trim() || '',
         quantity: parseFloat(cells[2]) || 0,
         unit: cells[3]?.trim() || 'PCS',
-        estimated_price: parseFloat(cells[4]) || 0
+        estimated_price: parseFloat(cells[4]) || 0,
+        start_price: parseFloat(cells[5]) || 0,
+        min_decrement: parseFloat(cells[6]) || 0
       };
     });
 
@@ -110,7 +112,9 @@ const CreateAuction = () => {
           description: cells[1]?.trim() || '',
           quantity: parseFloat(cells[2]) || 0,
           unit: cells[3]?.trim() || 'PCS',
-          estimated_price: parseFloat(cells[4]) || 0
+          estimated_price: parseFloat(cells[4]) || 0,
+          start_price: parseFloat(cells[5]) || 0,
+          min_decrement: parseFloat(cells[6]) || 0
         };
       });
 
@@ -419,7 +423,7 @@ const CreateAuction = () => {
                 <h2 className="text-2xl font-heading font-bold text-slate-900">Line Items Grid</h2>
                 <p className="text-sm text-slate-500 mt-1">
                   Add items manually or bulk paste/upload. <br />
-                  <span className="font-semibold text-slate-600">Format:</span> Item Code, Description, Qty, Unit, Estimated Price
+                  <span className="font-semibold text-slate-600">Format:</span> Item Code, Description, Qty, Unit, Estimated Price, Ceiling Price, Min Decrement
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -446,13 +450,15 @@ const CreateAuction = () => {
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wide text-xs">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Item Code *</th>
-                    <th className="px-4 py-3 font-semibold w-1/3">Description *</th>
-                    <th className="px-4 py-3 font-semibold w-24">Qty</th>
-                    <th className="px-4 py-3 font-semibold w-28">Unit</th>
-                    <th className="px-4 py-3 font-semibold w-32">Est. Price</th>
-                    <th className="px-4 py-3 font-semibold w-32 text-right">Total</th>
-                    <th className="px-4 py-3 font-semibold w-16 text-center"></th>
+                    <th className="px-2 py-3 font-semibold">Item Code *</th>
+                    <th className="px-2 py-3 font-semibold w-1/4">Description *</th>
+                    <th className="px-2 py-3 font-semibold w-20">Qty</th>
+                    <th className="px-2 py-3 font-semibold w-24">Unit</th>
+                    <th className="px-2 py-3 font-semibold w-24 text-right">Est. Price</th>
+                    <th className="px-2 py-3 font-semibold w-24 text-right" title="Maximum price per unit allowed.">Ceiling Price</th>
+                    <th className="px-2 py-3 font-semibold w-24 text-right" title="Required drop per bid.">Min Decr.</th>
+                    <th className="px-2 py-3 font-semibold w-32 text-right">Est. Total</th>
+                    <th className="px-2 py-3 font-semibold w-12 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -463,7 +469,7 @@ const CreateAuction = () => {
 
                     return (
                       <tr key={index} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-2 py-2">
+                        <td className="px-1 py-2">
                           <Input
                             value={item.item_code}
                             onChange={(e) => updateItem(index, 'item_code', e.target.value)}
@@ -471,28 +477,28 @@ const CreateAuction = () => {
                             className={`h-9 text-sm ${isCodeMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
                           />
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-1 py-2">
                           <Input
                             value={item.description}
                             onChange={(e) => updateItem(index, 'description', e.target.value)}
-                            placeholder="Detailed Description"
+                            placeholder="Desc"
                             className={`h-9 text-sm ${isDescMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
                           />
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-1 py-2">
                           <Input
                             type="number"
-                            value={item.quantity || ''}
+                            value={item.quantity === 0 ? '' : item.quantity}
                             onChange={(e) => updateItem(index, 'quantity', e.target.value)}
                             placeholder="0"
-                            className="h-9 text-sm"
+                            className="h-9 text-sm text-right"
                           />
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-1 py-2">
                           <select
                             value={item.unit}
                             onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           >
                             <option value="PCS">PCS</option>
                             <option value="KG">KG</option>
@@ -505,19 +511,37 @@ const CreateAuction = () => {
                             <option value="Sq.m">Sq.m</option>
                           </select>
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-1 py-2">
                           <Input
                             type="number"
-                            value={item.estimated_price || ''}
+                            value={item.estimated_price === 0 ? '' : item.estimated_price}
                             onChange={(e) => updateItem(index, 'estimated_price', e.target.value)}
-                            placeholder="0.00"
-                            className="h-9 text-sm"
+                            placeholder="0"
+                            className="h-9 text-sm text-right"
                           />
                         </td>
-                        <td className="px-4 py-2 text-right font-mono font-medium text-slate-700">
+                        <td className="px-1 py-2">
+                          <Input
+                            type="number"
+                            value={item.start_price === 0 ? '' : item.start_price}
+                            onChange={(e) => updateItem(index, 'start_price', e.target.value)}
+                            placeholder="0"
+                            className="h-9 text-sm text-right bg-blue-50 focus-visible:bg-white"
+                          />
+                        </td>
+                        <td className="px-1 py-2">
+                          <Input
+                            type="number"
+                            value={item.min_decrement === 0 ? '' : item.min_decrement}
+                            onChange={(e) => updateItem(index, 'min_decrement', e.target.value)}
+                            placeholder="0"
+                            className="h-9 text-sm text-right bg-blue-50 focus-visible:bg-white"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono font-medium text-slate-700">
                           {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '-'}
                         </td>
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-1 py-2 text-center">
                           {items.length > 1 && (
                             <button
                               onClick={() => removeItem(index)}
@@ -533,8 +557,8 @@ const CreateAuction = () => {
                 </tbody>
                 <tfoot className="bg-slate-50 border-t border-slate-200">
                   <tr>
-                    <td colSpan={5} className="px-4 py-4 text-right font-bold text-slate-700">
-                      Auto Grand Total:
+                    <td colSpan={7} className="px-4 py-4 text-right font-bold text-slate-700">
+                      Auto Grand Total (Estimated):
                     </td>
                     <td className="px-4 py-4 text-right font-mono font-bold text-indigo-700 text-base">
                       ₹{items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.estimated_price || 0)), 0).toLocaleString('en-IN')}
@@ -707,58 +731,32 @@ const CreateAuction = () => {
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8" data-testid="step-config">
             <h2 className="text-2xl font-heading font-bold text-slate-900 mb-6">Auction Configuration</h2>
 
-            {/* Estimated Total Preview */}
-            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-5 mb-6">
-              <div className="text-xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">Estimated Total Value</div>
-              <div className="text-2xl font-mono font-bold text-indigo-700">
-                ₹{(config.start_price * items.reduce((sum, item) => sum + (item.quantity || 0), 0)).toLocaleString('en-IN')}
-              </div>
-              <div className="text-xs text-indigo-400 mt-1">
-                {items.map((item, i) => `${item.item_code || `Item ${i + 1}`}: ${item.quantity} ${item.unit} × ₹${config.start_price}`).join(' | ')}
+            {/* Price Preview Warning */}
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6">
+              <h3 className="text-md font-bold text-blue-800 mb-2">Item-Level Custom Pricing Verification</h3>
+              <p className="text-sm text-blue-700 mb-4">
+                You have configured precise start prices (ceilings) and minimum decrements independently for each item in the previous grid.
+                The overall auction maximum allowed opening total is based on these custom combinations.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white p-4 rounded-md shadow-sm border border-blue-100">
+                  <div className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-1">Total Estimated Base Value</div>
+                  <div className="text-xl font-mono font-bold text-blue-900">
+                    ₹{items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.estimated_price || 0)), 0).toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-md shadow-sm border border-indigo-100">
+                  <div className="text-xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">Total Allowed Opening Ceiling</div>
+                  <div className="text-xl font-mono font-bold text-indigo-900">
+                    ₹{items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.start_price || item.estimated_price || 0)), 0).toLocaleString('en-IN')}
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="space-y-6">
-              <div>
-                <Label htmlFor="start_price" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                  Ceiling Price per Unit (₹) *
-                </Label>
-                <Input
-                  id="start_price"
-                  name="start_price"
-                  type="number"
-                  step="0.01"
-                  value={config.start_price}
-                  onChange={handleConfigChange}
-                  placeholder="e.g., 255"
-                  className="h-12"
-                  data-testid="start-price-input"
-                />
-                <p className="text-sm text-slate-500 mt-1">
-                  Maximum unit price set by buyer. Suppliers must bid below this per-unit price.
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="min_decrement" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                  Minimum Decrement per Unit (₹) *
-                </Label>
-                <Input
-                  id="min_decrement"
-                  name="min_decrement"
-                  type="number"
-                  step="0.01"
-                  value={config.min_decrement}
-                  onChange={handleConfigChange}
-                  placeholder="e.g., 1"
-                  className="h-12"
-                  data-testid="min-decrement-input"
-                />
-                <p className="text-sm text-slate-500 mt-1">
-                  Each new bid must be at least this much lower (per unit) than the current L1.
-                </p>
-              </div>
-
               <div>
                 <Label htmlFor="duration_minutes" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
                   Duration (Minutes) *
