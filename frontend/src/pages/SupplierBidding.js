@@ -143,9 +143,17 @@ const SupplierBidding = () => {
     return Number.isInteger(val) ? val.toLocaleString('en-IN') : val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  // Determine if we should force whole numbers
+  const isWholeDecrement = auction && Number.isInteger(auction.config?.min_decrement);
+
   const updateItemBid = (index, value) => {
     const updated = [...itemBids];
-    updated[index].unit_price = parseFloat(value) || 0;
+    // Force integer when decrement is a whole number — zero tolerance
+    if (isWholeDecrement) {
+      updated[index].unit_price = parseInt(value, 10) || 0;
+    } else {
+      updated[index].unit_price = Math.round(parseFloat(value) * 100) / 100 || 0;
+    }
     setItemBids(updated);
     calculateTotal(updated);
   };
@@ -158,7 +166,8 @@ const SupplierBidding = () => {
         total += (bid.unit_price || 0) * (item.quantity || 0);
       }
     });
-    setTotalAmount(total);
+    // Force integer total when using whole number decrement
+    setTotalAmount(isWholeDecrement ? Math.round(total) : Math.round(total * 100) / 100);
   };
 
   // Frontend pre-validation before API call

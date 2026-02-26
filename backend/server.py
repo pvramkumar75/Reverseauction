@@ -524,21 +524,31 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
                 detail=f"Unit price (₹{unit_price}) must be lower than ceiling price (₹{start_price}/unit)"
             )
         # Must be a valid multiple of min_decrement below start_price
-        # Use integer math (cents) to avoid floating point issues
         if min_decrement > 0:
-            # Convert to integer cents (multiply by 100)
-            start_cents = round(start_price * 100)
-            price_cents = round(unit_price * 100)
-            decrement_cents = round(min_decrement * 100)
+            # If decrement is a whole number, force bid to be a whole number
+            # Using epsilon to check if it has any fractional part
+            is_whole_decrement = abs(min_decrement - round(min_decrement)) < 0.0001
+            if is_whole_decrement:
+                has_fraction = abs(unit_price - round(unit_price)) > 0.0001
+                if has_fraction:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unit price (₹{unit_price}) must be a whole number because the minimum decrement (₹{min_decrement}) is a whole number."
+                    )
+
+            # Use integer math (cents) to avoid floating point issues for all cases
+            start_cents = int(round(start_price * 100))
+            price_cents = int(round(unit_price * 100))
+            decrement_cents = int(round(min_decrement * 100))
             
             diff_cents = start_cents - price_cents
             if diff_cents <= 0 or diff_cents % decrement_cents != 0:
-                valid1 = round(start_price - min_decrement, 2)
-                valid2 = round(start_price - 2 * min_decrement, 2)
-                valid3 = round(start_price - 3 * min_decrement, 2)
+                v1 = round(start_price - min_decrement, 2)
+                v2 = round(start_price - 2 * min_decrement, 2)
+                v3 = round(start_price - 3 * min_decrement, 2)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{valid1}, ₹{valid2}, ₹{valid3}..."
+                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{v1}, ₹{v2}, ₹{v3}..."
                 )
     
     # Get current best bid (L1)
@@ -611,16 +621,35 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     
     items_info = json.loads(auction.items)
     total_qty = sum(it.get('quantity', 0) for it in items_info) or 1
-    new_unit_price = bid_data.total_amount / total_qty
-    decrement_value = round(prev_l1_unit - new_unit_price, 2) if new_unit_price < prev_l1_unit else 0
+    
+    # Use the first item's unit price if only one item, or calc avg
+    if len(bid_data.item_bids) == 1:
+        new_unit_price = bid_data.item_bids[0].get('unit_price', 0)
+    else:
+        new_unit_price = bid_data.total_amount / total_qty
+    
+    # Calculate decrement using integer cents for precision
+    p_l1_cents = int(round(prev_l1_unit * 100))
+    n_up_cents = int(round(new_unit_price * 100))
+    decrement_cents = p_l1_cents - n_up_cents
+    decrement_value = max(0, decrement_cents / 100.0)
     
     # Get updated L1 after this bid
     l1_result = await db.execute(
         select(BidDB).where(BidDB.auction_id == bid_data.auction_id).order_by(BidDB.total_amount.asc())
     )
     current_l1_bid = l1_result.scalars().first()
-    current_l1_unit = (current_l1_bid.total_amount / total_qty) if current_l1_bid else start_price
     
+    # Determine display L1 unit price
+    if current_l1_bid:
+        c_l1_items = json.loads(current_l1_bid.item_bids) if isinstance(current_l1_bid.item_bids, str) else current_l1_bid.item_bids
+        if len(c_l1_items) == 1:
+            current_l1_unit = c_l1_items[0].get('unit_price', 0)
+        else:
+            current_l1_unit = current_l1_bid.total_amount / total_qty
+    else:
+        current_l1_unit = start_price
+
     # Build per-item unit prices
     item_prices = []
     for ib in bid_data.item_bids:
@@ -629,15 +658,18 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
             'unit_price': ib.get('unit_price', 0)
         })
     
+    # If decrement is a whole number, force displays to be whole numbers
+    is_whole_decrement = abs(min_decrement - round(min_decrement)) < 0.0001
+    
     history_entry = {
         'timestamp': now.isoformat(),
         'supplier_name': supplier['name'],
         'supplier_token': bid_data.supplier_token,
         'item_prices': item_prices,
         'total_amount': bid_data.total_amount,
-        'unit_price_avg': round(new_unit_price, 2),
-        'decrement': decrement_value,
-        'l1_unit_price': round(current_l1_unit, 2),
+        'unit_price_avg': round(new_unit_price) if is_whole_decrement else round(new_unit_price, 2),
+        'decrement': round(decrement_value) if is_whole_decrement else round(decrement_value, 2),
+        'l1_unit_price': round(current_l1_unit) if is_whole_decrement else round(current_l1_unit, 2),
         'l1_supplier': current_l1_bid.supplier_name if current_l1_bid else supplier['name'],
         'delivery_days': bid_data.delivery_days,
         'warranty_months': bid_data.warranty_months,
