@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '@/utils/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info, StopCircle, Download } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { formatDistanceToNow } from 'date-fns';
+import { ChevronDown, ChevronUp, ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info, StopCircle, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -25,6 +25,14 @@ const LiveAuction = () => {
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [bidHistory, setBidHistory] = useState([]);
+  const [expandedBids, setExpandedBids] = useState({});
+
+  const toggleBidExpansion = (idx) => {
+    setExpandedBids(prev => ({
+      ...prev,
+      [idx]: !prev[idx]
+    }));
+  };
 
   // Smart price formatting — no decimals if whole number
   const fmtPrice = (val) => {
@@ -317,6 +325,8 @@ const LiveAuction = () => {
   }
 
   // Chart Data Preparation
+  // We want to show the downward trend. Original bidHistory is [latest, ..., earliest]
+  // We reverse it to get [earliest, ..., latest] for the X-Axis timeline
   const chartData = [...bidHistory].reverse().map((bid, index) => {
     return {
       name: `Bid ${index + 1}`,
@@ -540,48 +550,89 @@ const LiveAuction = () => {
                 <tbody>
                   {bidHistory.map((entry, idx) => {
                     const isNewL1 = entry.decrement > 0;
+                    const isExpanded = expandedBids[idx];
                     const ts = new Date(entry.timestamp);
                     const timeStr = ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                     const dateStr = ts.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+
                     return (
-                      <tr
-                        key={idx}
-                        className={`border-b border-slate-100 transition-colors ${isNewL1 ? 'bg-emerald-50 hover:bg-emerald-100' : 'hover:bg-slate-50'
-                          } ${idx === bidHistory.length - 1 ? 'animate-pulse' : ''}`}
-                      >
-                        <td className="py-3 px-3 text-center">
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold text-xs">
-                            {entry.round}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
-                          <div className="font-mono text-xs">{timeStr}</div>
-                          <div className="text-xs text-slate-400">{dateStr}</div>
-                        </td>
-                        <td className="py-3 px-3 font-medium text-slate-900">{entry.supplier_name}</td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
-                          ₹{fmtPrice(entry.unit_price_avg)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-700">
-                          ₹{fmtPrice(entry.total_amount)}
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          {entry.decrement > 0 ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
-                              ▼ ₹{fmtPrice(entry.decrement)}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
-                          ₹{fmtPrice(entry.l1_unit_price)}
-                        </td>
-                        <td className="py-3 px-3 text-slate-700">
-                          {entry.l1_supplier}
-                          {isNewL1 && <Trophy className="w-3 h-3 inline ml-1 text-emerald-600" />}
-                        </td>
-                      </tr>
+                      <React.Fragment key={idx}>
+                        <tr
+                          className={`border-b border-slate-100 transition-colors cursor-pointer ${isNewL1 ? 'bg-emerald-50 hover:bg-emerald-100' : 'hover:bg-slate-50'
+                            } ${idx === bidHistory.length - 1 ? 'animate-pulse' : ''}`}
+                          onClick={() => toggleBidExpansion(idx)}
+                        >
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold text-xs">
+                                {entry.round}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
+                            <div className="font-mono text-xs">{timeStr}</div>
+                            <div className="text-xs text-slate-400">{dateStr}</div>
+                          </td>
+                          <td className="py-3 px-3 font-medium text-slate-900">{entry.supplier_name}</td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                            ₹{fmtPrice(entry.unit_price_avg)}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-slate-700">
+                            ₹{fmtPrice(entry.total_amount)}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            {entry.decrement > 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                                ▼ ₹{fmtPrice(entry.decrement)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
+                            ₹{fmtPrice(entry.l1_unit_price)}
+                          </td>
+                          <td className="py-3 px-3 text-slate-700">
+                            <div className="flex items-center justify-between">
+                              <span>{entry.l1_supplier}</span>
+                              {isNewL1 && <Trophy className="w-3 h-3 text-emerald-600" />}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-slate-50/80 border-b border-slate-200">
+                            <td colSpan={8} className="p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {(entry.item_prices || []).map((ip, iidx) => {
+                                  // Find the ceiling/start price for this item if possible from auction items
+                                  const itemDef = (auction.items || []).find(it => it.item_code === ip.item_code);
+                                  return (
+                                    <div key={iidx} className="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="font-bold text-slate-900 text-xs">{ip.item_code}</span>
+                                        {ip.unit_price <= entry.l1_unit_price && <Trophy className="w-3 h-3 text-emerald-500" />}
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                        <div>
+                                          <div className="text-slate-500 uppercase">Unit Price</div>
+                                          <div className="font-mono font-bold text-slate-900">₹{fmtPrice(ip.unit_price)}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-slate-500 uppercase">Status</div>
+                                          <div className={`font-semibold ${ip.unit_price <= entry.l1_unit_price ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                            {ip.unit_price <= entry.l1_unit_price ? 'L1 on Item' : 'Competing'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
