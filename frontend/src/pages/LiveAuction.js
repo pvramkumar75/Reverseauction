@@ -20,10 +20,12 @@ const LiveAuction = () => {
   const [latestBidId, setLatestBidId] = useState(null);
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [bidHistory, setBidHistory] = useState([]);
 
   useEffect(() => {
     fetchAuction();
     fetchBids();
+    fetchBidHistory();
 
     const newSocket = io(API_URL);
     setSocket(newSocket);
@@ -67,6 +69,7 @@ const LiveAuction = () => {
     // Poll for bids every 5 seconds as fallback (WebSocket may be unreliable on free tier)
     const pollInterval = setInterval(() => {
       fetchBids();
+      fetchBidHistory();
       fetchAuction();
     }, 5000);
 
@@ -115,6 +118,15 @@ const LiveAuction = () => {
       setBids(response.data);
     } catch (error) {
       console.error('Failed to load bids:', error);
+    }
+  };
+
+  const fetchBidHistory = async () => {
+    try {
+      const response = await api.get(`/auctions/${auctionId}/bid-history`);
+      setBidHistory(response.data);
+    } catch (error) {
+      console.error('Failed to load bid history:', error);
     }
   };
 
@@ -374,58 +386,74 @@ const LiveAuction = () => {
         </div>
 
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8" data-testid="bids-table">
-          <h3 className="text-xl font-heading font-bold text-slate-900 mb-4">Live Bidding</h3>
-          {bids.length === 0 ? (
+          <h3 className="text-xl font-heading font-bold text-slate-900 mb-2">Live Bidding</h3>
+          <p className="text-sm text-slate-500 mb-4">Every bid action is recorded with timestamp, unit price, and decremental value.</p>
+          {bidHistory.length === 0 ? (
             <div className="text-center py-12 text-slate-500" data-testid="no-bids">
               No bids received yet
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                      Rank
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                      Supplier
-                    </th>
-                    <th className="text-right py-3 px-4 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                      Total Amount
-                    </th>
-                    <th className="text-right py-3 px-4 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                      Delivery Days
-                    </th>
-                    <th className="text-right py-3 px-4 text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                      Last Updated
-                    </th>
+                  <tr className="border-b-2 border-slate-200 bg-slate-50">
+                    <th className="text-center py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">#</th>
+                    <th className="text-left py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">Time</th>
+                    <th className="text-left py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">Supplier</th>
+                    <th className="text-right py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">Unit Price</th>
+                    <th className="text-right py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">Total Amount</th>
+                    <th className="text-right py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">Decrement</th>
+                    <th className="text-right py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">L1 After</th>
+                    <th className="text-left py-3 px-3 font-semibold text-slate-700 uppercase tracking-wide text-xs">L1 Supplier</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bids
-                    .sort((a, b) => a.rank - b.rank)
-                    .map((bid) => (
+                  {bidHistory.map((entry, idx) => {
+                    const isNewL1 = entry.decrement > 0;
+                    const ts = new Date(entry.timestamp);
+                    const timeStr = ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const dateStr = ts.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                    return (
                       <tr
-                        key={bid.id}
-                        className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${latestBidId === bid.id ? 'animate-bid-flash' : ''}`}
-                        data-testid={`bid-row-${bid.id}`}
+                        key={idx}
+                        className={`border-b border-slate-100 transition-colors ${isNewL1 ? 'bg-emerald-50 hover:bg-emerald-100' : 'hover:bg-slate-50'
+                          } ${idx === bidHistory.length - 1 ? 'animate-pulse' : ''}`}
                       >
-                        <td className="py-4 px-4">
-                          <span className={getRankBadge(bid.rank)}>
-                            {bid.rank === 1 && <Trophy className="w-3 h-3 mr-1" />}
-                            L{bid.rank}
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold text-xs">
+                            {entry.round}
                           </span>
                         </td>
-                        <td className="py-4 px-4 font-medium text-slate-900">{bid.supplier_name || 'N/A'}</td>
-                        <td className="py-4 px-4 text-right font-mono font-bold text-lg text-slate-900">
-                          ₹{(bid.total_amount || 0).toLocaleString('en-IN')}
+                        <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
+                          <div className="font-mono text-xs">{timeStr}</div>
+                          <div className="text-xs text-slate-400">{dateStr}</div>
                         </td>
-                        <td className="py-4 px-4 text-right text-slate-600">{bid.delivery_days} days</td>
-                        <td className="py-4 px-4 text-right text-sm text-slate-500">
-                          {bid.updated_at ? formatDistanceToNow(new Date(bid.updated_at), { addSuffix: true }) : 'Just now'}
+                        <td className="py-3 px-3 font-medium text-slate-900">{entry.supplier_name}</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                          ₹{entry.unit_price_avg?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">
+                          ₹{entry.total_amount?.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {entry.decrement > 0 ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                              ▼ ₹{entry.decrement}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
+                          ₹{entry.l1_unit_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-slate-700">
+                          {entry.l1_supplier}
+                          {isNewL1 && <Trophy className="w-3 h-3 inline ml-1 text-emerald-600" />}
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

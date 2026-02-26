@@ -90,6 +90,7 @@ class AuctionDB(Base):
     status = Column(String, default="draft")
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
+    bid_history = Column(Text, default="[]")  # JSON array of bid events
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
 
 class BidDB(Base):
@@ -590,6 +591,58 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
     
     await db.commit()
     
+    # --- Record bid history entry ---
+    # Reload auction to get current bid_history
+    await db.refresh(auction)
+    history = json.loads(auction.bid_history or '[]')
+    
+    # Calculate decrement from previous L1
+    prev_l1_unit = start_price  # default to ceiling
+    if len(history) > 0:
+        prev_l1_unit = history[-1].get('l1_unit_price', start_price)
+    
+    items_info = json.loads(auction.items)
+    total_qty = sum(it.get('quantity', 0) for it in items_info) or 1
+    new_unit_price = bid_data.total_amount / total_qty
+    decrement_value = round(prev_l1_unit - new_unit_price, 2) if new_unit_price < prev_l1_unit else 0
+    
+    # Get updated L1 after this bid
+    l1_result = await db.execute(
+        select(BidDB).where(BidDB.auction_id == bid_data.auction_id).order_by(BidDB.total_amount.asc())
+    )
+    current_l1_bid = l1_result.scalars().first()
+    current_l1_unit = (current_l1_bid.total_amount / total_qty) if current_l1_bid else start_price
+    
+    # Build per-item unit prices
+    item_prices = []
+    for ib in bid_data.item_bids:
+        item_prices.append({
+            'item_code': ib.get('item_code', ''),
+            'unit_price': ib.get('unit_price', 0)
+        })
+    
+    history_entry = {
+        'timestamp': now.isoformat(),
+        'supplier_name': supplier['name'],
+        'supplier_token': bid_data.supplier_token,
+        'item_prices': item_prices,
+        'total_amount': bid_data.total_amount,
+        'unit_price_avg': round(new_unit_price, 2),
+        'decrement': decrement_value,
+        'l1_unit_price': round(current_l1_unit, 2),
+        'l1_supplier': current_l1_bid.supplier_name if current_l1_bid else supplier['name'],
+        'delivery_days': bid_data.delivery_days,
+        'warranty_months': bid_data.warranty_months,
+        'bid_type': 'update' if existing_bid else 'new',
+        'round': len(history) + 1
+    }
+    history.append(history_entry)
+    
+    await db.execute(
+        update(AuctionDB).where(AuctionDB.id == auction.id).values(bid_history=json.dumps(history))
+    )
+    await db.commit()
+    
     # Calculate ranks and emit
     await calculate_and_emit_ranks(bid_data.auction_id, db)
     
@@ -643,6 +696,14 @@ async def get_auction_bids(auction_id: str, db: AsyncSession = Depends(get_db)):
         "rank": b.rank,
         "updated_at": b.updated_at
     } for b in bids]
+
+@api_router.get("/auctions/{auction_id}/bid-history")
+async def get_bid_history(auction_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AuctionDB).where(AuctionDB.id == auction_id))
+    auction = result.scalar_one_or_none()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    return json.loads(auction.bid_history or '[]')
 
 @api_router.get("/supplier/{token}/bid")
 async def get_supplier_bid(token: str, auction_id: str, db: AsyncSession = Depends(get_db)):
