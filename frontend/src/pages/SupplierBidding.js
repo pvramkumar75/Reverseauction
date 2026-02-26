@@ -175,8 +175,9 @@ const SupplierBidding = () => {
       if (minDecrement > 0) {
         const diff = parseFloat((startPrice - unitPrice).toFixed(4));
         const remainder = parseFloat((diff % minDecrement).toFixed(4));
-        if (remainder !== 0 && Math.abs(remainder - minDecrement) > 0.001) {
-          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${startPrice - minDecrement}, ₹${startPrice - 2 * minDecrement}, ₹${startPrice - 3 * minDecrement}...`;
+        const epsilon = 0.01;
+        if (remainder > epsilon && Math.abs(remainder - minDecrement) > epsilon) {
+          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${(startPrice - minDecrement).toFixed(2)}, ₹${(startPrice - 2 * minDecrement).toFixed(2)}, ₹${(startPrice - 3 * minDecrement).toFixed(2)}...`;
         }
       }
       // Check vs L1

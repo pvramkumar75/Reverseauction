@@ -527,10 +527,15 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
         if min_decrement > 0:
             diff_from_start = round(start_price - unit_price, 4)
             remainder = round(diff_from_start % min_decrement, 4)
-            if remainder != 0 and remainder != min_decrement:
+            # Use epsilon tolerance for floating point comparison
+            epsilon = 0.01
+            if remainder > epsilon and abs(remainder - min_decrement) > epsilon:
+                valid1 = round(start_price - min_decrement, 2)
+                valid2 = round(start_price - 2 * min_decrement, 2)
+                valid3 = round(start_price - 3 * min_decrement, 2)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{start_price - min_decrement}, ₹{start_price - 2*min_decrement}, ₹{start_price - 3*min_decrement}..."
+                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{valid1}, ₹{valid2}, ₹{valid3}..."
                 )
     
     # Get current best bid (L1)
