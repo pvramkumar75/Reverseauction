@@ -410,6 +410,53 @@ async def start_auction(auction_id: str, db: AsyncSession = Depends(get_db)):
     
     return {"message": "Auction started", "end_time": end_time}
 
+@api_router.post("/auctions/{auction_id}/terminate")
+async def terminate_auction(auction_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AuctionDB).where(AuctionDB.id == auction_id))
+    a = result.scalar_one_or_none()
+    if not a:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    
+    await db.execute(
+        update(AuctionDB).where(AuctionDB.id == auction_id).values(status="completed")
+    )
+    await db.commit()
+    
+    # Notify all
+    await sio.emit('auction_terminated', {'auction_id': auction_id}, room=f"buyer_{auction_id}")
+    suppliers = json.loads(a.suppliers)
+    for s in suppliers:
+        await sio.emit('auction_terminated', {'auction_id': auction_id}, room=f"supplier_{s['token']}")
+    
+    return {"message": "Auction terminated successfully"}
+
+@api_router.post("/supplier/{token}/conclude")
+async def conclude_supplier_bid(token: str, db: AsyncSession = Depends(get_db)):
+    """Supplier concludes bidding — they won't bid further."""
+    result = await db.execute(select(AuctionDB))
+    all_auctions = result.scalars().all()
+    auction = None
+    for a in all_auctions:
+        suppliers = json.loads(a.suppliers)
+        if any(s['token'] == token for s in suppliers):
+            auction = a
+            break
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    
+    # Mark the supplier's bid as concluded
+    result = await db.execute(
+        select(BidDB).where(BidDB.auction_id == auction.id, BidDB.supplier_token == token)
+    )
+    bid = result.scalar_one_or_none()
+    if bid:
+        await db.execute(
+            update(BidDB).where(BidDB.id == bid.id).values(remarks=(bid.remarks or '') + ' [CONCLUDED]')
+        )
+        await db.commit()
+    
+    return {"message": "You have concluded your bidding. Your last bid stands as final."}
+
 # Supplier endpoints
 @api_router.get("/supplier/{token}")
 async def get_supplier_auction(token: str, db: AsyncSession = Depends(get_db)):
@@ -463,24 +510,35 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="Auction is not active")
     
     config = json.loads(auction.config)
+    min_decrement = config['min_decrement']
+    start_price = config['start_price']
     
-    # Validate each item's UNIT PRICE against start_price (per-unit ceiling)
+    # Validate each item's UNIT PRICE
     for item_bid in bid_data.item_bids:
         unit_price = item_bid.get('unit_price', 0)
-        if unit_price >= config['start_price']:
+        # Must be below ceiling
+        if unit_price >= start_price:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Unit price (₹{unit_price}) must be lower than starting price (₹{config['start_price']}/unit)"
+                detail=f"Unit price (₹{unit_price}) must be lower than ceiling price (₹{start_price}/unit)"
             )
+        # Must be a valid multiple of min_decrement below start_price
+        if min_decrement > 0:
+            diff_from_start = round(start_price - unit_price, 4)
+            remainder = round(diff_from_start % min_decrement, 4)
+            if remainder != 0 and remainder != min_decrement:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unit price (₹{unit_price}) must be a multiple of ₹{min_decrement} below ceiling (₹{start_price}). Valid examples: ₹{start_price - min_decrement}, ₹{start_price - 2*min_decrement}, ₹{start_price - 3*min_decrement}..."
+                )
     
-    # Get current best bid
+    # Get current best bid (L1)
     bid_result = await db.execute(
         select(BidDB).where(BidDB.auction_id == bid_data.auction_id).order_by(BidDB.total_amount.asc())
     )
     best_bid = bid_result.scalars().first()
     
     if best_bid:
-        min_decrement = config['min_decrement']
         best_item_bids = json.loads(best_bid.item_bids) if isinstance(best_bid.item_bids, str) else best_bid.item_bids
         for i, item_bid in enumerate(bid_data.item_bids):
             unit_price = item_bid.get('unit_price', 0)
@@ -490,7 +548,7 @@ async def create_or_update_bid(bid_data: BidCreate, db: AsyncSession = Depends(g
                 if unit_price > max_allowed_unit:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Unit price (₹{unit_price}) must be at least ₹{min_decrement} lower than current best (₹{best_unit}/unit). Max: ₹{max_allowed_unit}/unit"
+                        detail=f"Unit price (₹{unit_price}) must be at least ₹{min_decrement} lower than current L1 (₹{best_unit}/unit). Max allowed: ₹{max_allowed_unit}/unit"
                     )
 
     

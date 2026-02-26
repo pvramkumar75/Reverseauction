@@ -210,47 +210,72 @@ const CreateAuction = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="payment_terms" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                    Payment Terms
+                    Payment Terms *
                   </Label>
-                  <Input
+                  <select
                     id="payment_terms"
                     name="payment_terms"
                     value={formData.payment_terms}
                     onChange={handleChange}
-                    placeholder="e.g., Net 30"
-                    className="h-12"
+                    className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="payment-terms-input"
-                  />
+                  >
+                    <option value="">Select Payment Terms</option>
+                    <option value="Advance">Advance</option>
+                    <option value="30 Days Credit">30 Days Credit</option>
+                    <option value="45 Days Credit">45 Days Credit</option>
+                    <option value="60 Days Credit">60 Days Credit</option>
+                    <option value="30 Days PDC">30 Days PDC</option>
+                    <option value="100% against PI">100% against PI</option>
+                    <option value="30%-60%-10%">30%-60%-10%</option>
+                    <option value="50%-50%">50%-50%</option>
+                    <option value="90%-10%">90%-10%</option>
+                    <option value="10%-90%">10%-90%</option>
+                    <option value="40%-60%">40%-60%</option>
+                    <option value="100% against Delivery">100% against Delivery</option>
+                  </select>
                 </div>
 
                 <div>
                   <Label htmlFor="delivery_terms" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
                     Delivery Terms
                   </Label>
-                  <Input
+                  <select
                     id="delivery_terms"
                     name="delivery_terms"
                     value={formData.delivery_terms}
                     onChange={handleChange}
-                    placeholder="e.g., FOB"
-                    className="h-12"
+                    className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="delivery-terms-input"
-                  />
+                  >
+                    <option value="">Select Delivery Terms</option>
+                    <option value="Ex-Works">Ex-Works</option>
+                    <option value="FOB">FOB (Free on Board)</option>
+                    <option value="CIF">CIF (Cost, Insurance & Freight)</option>
+                    <option value="DDP">DDP (Delivered Duty Paid)</option>
+                    <option value="FCA">FCA (Free Carrier)</option>
+                    <option value="CFR">CFR (Cost & Freight)</option>
+                  </select>
                 </div>
 
                 <div>
                   <Label htmlFor="freight_condition" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                    Freight Condition
+                    Freight Condition *
                   </Label>
-                  <Input
+                  <select
                     id="freight_condition"
                     name="freight_condition"
                     value={formData.freight_condition}
                     onChange={handleChange}
-                    placeholder="e.g., Prepaid"
-                    className="h-12"
+                    className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="freight-condition-input"
-                  />
+                  >
+                    <option value="">Select Freight</option>
+                    <option value="FOR">FOR (Free on Road)</option>
+                    <option value="Ex-Works">Ex-Works</option>
+                    <option value="Inclusive">Inclusive</option>
+                    <option value="Extra">Extra</option>
+                  </select>
                 </div>
               </div>
             </div>

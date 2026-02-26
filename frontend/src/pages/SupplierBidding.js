@@ -6,9 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Zap, TrendingDown, Trophy, AlertCircle } from 'lucide-react';
+import { Zap, TrendingDown, Trophy, AlertCircle, Ban, CheckCircle2 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
+
+const PAYMENT_OPTIONS = [
+  'Advance', '30 Days Credit', '45 Days Credit', '60 Days Credit',
+  '30 Days PDC', '100% against PI', '30%-60%-10%', '50%-50%',
+  '90%-10%', '10%-90%', '40%-60%', '100% against Delivery',
+];
 
 const SupplierBidding = () => {
   const { token } = useParams();
@@ -16,6 +22,7 @@ const SupplierBidding = () => {
   const [currentBid, setCurrentBid] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [concluded, setConcluded] = useState(false);
   const [socket, setSocket] = useState(null);
   const [rank, setRank] = useState(0);
   const [rankColor, setRankColor] = useState('red');
@@ -23,7 +30,8 @@ const SupplierBidding = () => {
   const [itemBids, setItemBids] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [deliveryDays, setDeliveryDays] = useState(0);
-  const [warrantyMonths, setWarrantyMonths] = useState(0);
+  const [warrantyMonths, setWarrantyMonths] = useState(12);
+  const [paymentTerms, setPaymentTerms] = useState('');
   const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
@@ -41,6 +49,7 @@ const SupplierBidding = () => {
       console.log('Rank update received:', data);
       setRank(data.rank);
       setRankColor(data.color);
+      fetchAuction(); // Refresh L1 data
     });
 
     newSocket.on('auction_started', (data) => {
@@ -54,8 +63,19 @@ const SupplierBidding = () => {
       fetchAuction();
     });
 
+    newSocket.on('auction_terminated', () => {
+      toast.error('The buyer has terminated this auction.');
+      fetchAuction();
+    });
+
+    // Polling fallback for L1 updates
+    const pollInterval = setInterval(() => {
+      fetchAuction();
+    }, 5000);
+
     return () => {
       newSocket.close();
+      clearInterval(pollInterval);
     };
   }, [token]);
 
@@ -79,13 +99,15 @@ const SupplierBidding = () => {
       const allBids = bidsResponse.data;
       const l1Bid = allBids.length > 0 ? Math.min(...allBids.map(b => b.total_amount)) : null;
 
-      setAuction({ ...auctionData, current_l1: l1Bid });
+      setAuction({ ...auctionData, current_l1: l1Bid, bids_count: allBids.length });
 
-      const initialBids = response.data.items.map((item) => ({
-        item_code: item.item_code,
-        unit_price: 0,
-      }));
-      setItemBids(initialBids);
+      if (!itemBids.length || itemBids.every(b => b.unit_price === 0)) {
+        const initialBids = response.data.items.map((item) => ({
+          item_code: item.item_code,
+          unit_price: 0,
+        }));
+        setItemBids(initialBids);
+      }
     } catch (error) {
       toast.error('Failed to load auction');
     } finally {
@@ -103,9 +125,12 @@ const SupplierBidding = () => {
         setItemBids(response.data.item_bids);
         setTotalAmount(response.data.total_amount);
         setDeliveryDays(response.data.delivery_days);
-        setWarrantyMonths(response.data.warranty_months || 0);
+        setWarrantyMonths(response.data.warranty_months || 12);
         setRemarks(response.data.remarks || '');
         setRank(response.data.rank || 0);
+        if (response.data.remarks && response.data.remarks.includes('[CONCLUDED]')) {
+          setConcluded(true);
+        }
       }
     } catch (error) {
       console.log('No existing bid');
@@ -130,11 +155,58 @@ const SupplierBidding = () => {
     setTotalAmount(total);
   };
 
+  // Frontend pre-validation before API call
+  const validateBidLocally = () => {
+    const startPrice = auction.config?.start_price || 0;
+    const minDecrement = auction.config?.min_decrement || 0;
+    const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+    const currentL1Unit = auction.current_l1 ? (auction.current_l1 / totalQty) : startPrice;
+
+    for (let i = 0; i < itemBids.length; i++) {
+      const unitPrice = itemBids[i]?.unit_price || 0;
+
+      if (unitPrice <= 0) {
+        return `Please enter a valid unit price for ${auction.items[i]?.item_code || `Item ${i + 1}`}`;
+      }
+      if (unitPrice >= startPrice) {
+        return `Unit price (₹${unitPrice}) must be lower than ceiling price (₹${startPrice}/unit)`;
+      }
+      // Check multiples
+      if (minDecrement > 0) {
+        const diff = parseFloat((startPrice - unitPrice).toFixed(4));
+        const remainder = parseFloat((diff % minDecrement).toFixed(4));
+        if (remainder !== 0 && Math.abs(remainder - minDecrement) > 0.001) {
+          return `Unit price (₹${unitPrice}) must be a multiple of ₹${minDecrement} below ceiling (₹${startPrice}). Valid: ₹${startPrice - minDecrement}, ₹${startPrice - 2 * minDecrement}, ₹${startPrice - 3 * minDecrement}...`;
+        }
+      }
+      // Check vs L1
+      if (auction.current_l1) {
+        const maxAllowed = currentL1Unit - minDecrement;
+        if (unitPrice > maxAllowed) {
+          return `Unit price (₹${unitPrice}) must be at least ₹${minDecrement} lower than current L1 (₹${currentL1Unit.toFixed(2)}/unit). Max: ₹${maxAllowed.toFixed(2)}/unit`;
+        }
+      }
+    }
+    return null; // Valid
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (concluded) {
+      toast.error('You have concluded your bidding. No further bids allowed.');
+      return;
+    }
+
     if (totalAmount === 0) {
       toast.error('Please enter valid bid amounts');
+      return;
+    }
+
+    // Local validation first — instant feedback
+    const validationError = validateBidLocally();
+    if (validationError) {
+      toast.error(validationError, { duration: 6000 });
       return;
     }
 
@@ -147,16 +219,32 @@ const SupplierBidding = () => {
         total_amount: totalAmount,
         delivery_days: deliveryDays,
         warranty_months: warrantyMonths || null,
-        remarks: remarks || null,
+        remarks: `${remarks || ''}${paymentTerms ? ` | Payment: ${paymentTerms}` : ''}`,
       };
 
       await api.post(`/bids`, payload);
       toast.success('Bid submitted successfully!');
       fetchCurrentBid();
+      fetchAuction();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit bid');
+      // Show prominent error popup
+      const errorMsg = error.response?.data?.detail || 'Failed to submit bid';
+      toast.error(errorMsg, { duration: 8000 });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleConclude = async () => {
+    if (!window.confirm('Are you sure you want to conclude? Your last bid will be your final offer. You cannot bid again.')) {
+      return;
+    }
+    try {
+      await api.post(`/supplier/${token}/conclude`);
+      setConcluded(true);
+      toast.success('You have concluded your bidding. Your last bid stands as your final offer.');
+    } catch (error) {
+      toast.error('Failed to conclude bidding');
     }
   };
 
@@ -189,6 +277,11 @@ const SupplierBidding = () => {
     );
   }
 
+  const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+  const currentL1Unit = auction.current_l1 ? (auction.current_l1 / totalQty) : null;
+  const startPrice = auction.config?.start_price || 0;
+  const minDecrement = auction.config?.min_decrement || 0;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-white border-b border-slate-100 shadow-sm">
@@ -220,6 +313,53 @@ const SupplierBidding = () => {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Auction Info Bar — always visible */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Payment</div>
+              <div className="font-medium text-slate-900">{auction.payment_terms || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Freight</div>
+              <div className="font-medium text-slate-900">{auction.freight_condition || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Ceiling Price</div>
+              <div className="font-mono font-bold text-slate-900">₹{startPrice}/unit</div>
+            </div>
+            <div>
+              <div className="text-slate-500 font-semibold uppercase text-xs">Min Decrement</div>
+              <div className="font-mono font-bold text-slate-900">₹{minDecrement}/unit</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Concluded Banner */}
+        {concluded && (
+          <div className="bg-slate-100 border border-slate-300 rounded-xl p-6 mb-8">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-slate-600 mt-1" />
+              <div>
+                <h3 className="text-lg font-heading font-bold text-slate-800 mb-1">Bidding Concluded</h3>
+                <p className="text-slate-600">You have concluded your bidding. Your last bid stands as your final offer.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {auction.status === 'completed' && (
+          <div className="bg-slate-100 border border-slate-300 rounded-xl p-6 mb-8">
+            <div className="flex items-start gap-3">
+              <Ban className="w-6 h-6 text-slate-600 mt-1" />
+              <div>
+                <h3 className="text-lg font-heading font-bold text-slate-800 mb-1">Auction Ended</h3>
+                <p className="text-slate-600">This auction has been completed. No further bids are accepted.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {auction.status === 'draft' && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8" data-testid="draft-banner">
             <div className="flex items-start gap-3">
@@ -229,8 +369,7 @@ const SupplierBidding = () => {
                   Auction Not Started Yet
                 </h3>
                 <p className="text-amber-800">
-                  You can submit your initial quote now. The live bidding will begin once the buyer
-                  starts the auction.
+                  The live bidding will begin once the buyer starts the auction.
                 </p>
               </div>
             </div>
@@ -246,154 +385,186 @@ const SupplierBidding = () => {
                   Live Auction in Progress!
                 </h3>
                 <p className="text-emerald-800">
-                  Submit lower bids to improve your ranking. The lowest bid (L1) wins the auction.
+                  Submit lower bids to improve your ranking. The lowest bid (L1) wins.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {auction.status === 'active' && (
+        {/* L1 Price Panel — always visible when auction is active or has bids */}
+        {(auction.status === 'active' || auction.bids_count > 0) && (
           <div className="bg-slate-900 text-white rounded-xl p-6 mb-8 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Trophy className="w-24 h-24" />
             </div>
-            {(() => {
-              const totalQty = (auction.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
-              const currentL1Total = auction.current_l1;
-              const currentL1Unit = currentL1Total ? (currentL1Total / totalQty) : (auction.config?.start_price || 0);
-              const targetUnit = Math.max(0, currentL1Unit - (auction.config?.min_decrement || 0));
-              return (
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div>
-                    <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Current L1 (per unit)</div>
-                    <div className="text-4xl font-mono font-bold text-emerald-400">
-                      ₹{currentL1Unit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Total: ₹{(currentL1Total || (auction.config?.start_price || 0) * totalQty).toLocaleString('en-IN')} ({totalQty} units)
-                    </div>
-                  </div>
-                  <div className="h-full border-l border-slate-700 hidden md:block" />
-                  <div>
-                    <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">Target Unit Price</div>
-                    <div className="text-2xl font-mono font-bold text-white">
-                      ₹{targetUnit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="mt-2 text-xs text-slate-400 italic">
-                      Bid ≤ ₹{targetUnit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}/unit to take Lead. (Min decrement: ₹{auction.config?.min_decrement}/unit)
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-
-        <form onSubmit={handleSubmit} data-testid="bid-form">
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8 mb-8">
-            <h3 className="text-xl font-heading font-bold text-slate-900 mb-6">Submit Your Bid</h3>
-
-            <div className="space-y-6">
-              {auction.items.map((item, idx) => (
-                <div key={idx} className="border border-slate-200 rounded-lg p-4" data-testid={`item-bid-${idx}`}>
-                  <div className="mb-3">
-                    <div className="font-bold text-slate-900">{item.item_code}</div>
-                    <div className="text-sm text-slate-600">
-                      {item.description} - Qty: {item.quantity || 0} {item.unit || 'PCS'}
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                      Your Unit Price (₹)
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={itemBids[idx]?.unit_price || ''}
-                      onChange={(e) => updateItemBid(idx, e.target.value)}
-                      placeholder="0.00"
-                      className="h-12 font-mono text-lg"
-                      required
-                    />
-                    <p className="text-sm text-slate-500 mt-1">
-                      Line Total: <span className="font-mono font-bold">₹{((itemBids[idx]?.unit_price || 0) * item.quantity).toLocaleString('en-IN')}</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
-
-              <div className="bg-slate-50 rounded-lg p-6">
-                <div className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
-                  Total Bid Amount
-                </div>
-                <div className="text-4xl font-mono font-bold text-slate-900" data-testid="total-amount">
-                  ₹{totalAmount.toLocaleString('en-IN')}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="delivery_days" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                    Delivery Days *
-                  </Label>
-                  <Input
-                    id="delivery_days"
-                    type="number"
-                    value={deliveryDays}
-                    onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="h-12"
-                    required
-                    data-testid="delivery-days-input"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="warranty_months" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                    Warranty (Months)
-                  </Label>
-                  <Input
-                    id="warranty_months"
-                    type="number"
-                    value={warrantyMonths}
-                    onChange={(e) => setWarrantyMonths(parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="h-12"
-                    data-testid="warranty-input"
-                  />
-                </div>
-              </div>
-
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
-                <Label htmlFor="remarks" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                  Remarks
-                </Label>
-                <Textarea
-                  id="remarks"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Any additional notes or conditions"
-                  rows={3}
-                  data-testid="remarks-input"
-                />
+                <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">
+                  Current L1 Price (per unit)
+                </div>
+                <div className="text-4xl font-mono font-bold text-emerald-400">
+                  ₹{currentL1Unit !== null ? currentL1Unit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : startPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {currentL1Unit !== null
+                    ? `L1 Total: ₹${auction.current_l1.toLocaleString('en-IN')} (${totalQty} units) | ${auction.bids_count} bid(s) placed`
+                    : `No bids yet. Ceiling: ₹${startPrice}/unit`}
+                </div>
+              </div>
+              <div className="h-full border-l border-slate-700 hidden md:block" />
+              <div>
+                <div className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-1">
+                  Your Target Unit Price
+                </div>
+                <div className="text-2xl font-mono font-bold text-white">
+                  ≤ ₹{currentL1Unit !== null
+                    ? (currentL1Unit - minDecrement).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    : (startPrice - minDecrement).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="mt-2 text-xs text-slate-400 italic">
+                  Min decrement: ₹{minDecrement}/unit. Bid must be in multiples of ₹{minDecrement}.
+                </div>
               </div>
             </div>
           </div>
+        )}
 
-          <div className="flex justify-center">
-            <Button
-              type="submit"
-              disabled={submitting}
-              size="lg"
-              className="h-14 px-12 text-lg font-medium shadow-lg hover:shadow-xl transition-all"
-              data-testid="submit-bid-button"
-            >
-              {submitting ? 'Submitting...' : currentBid ? 'Update Bid' : 'Submit Bid'}
-            </Button>
-          </div>
-        </form>
+        {!concluded && auction.status !== 'completed' && (
+          <form onSubmit={handleSubmit} data-testid="bid-form">
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8 mb-8">
+              <h3 className="text-xl font-heading font-bold text-slate-900 mb-6">Submit Your Bid</h3>
+
+              <div className="space-y-6">
+                {auction.items.map((item, idx) => (
+                  <div key={idx} className="border border-slate-200 rounded-lg p-4" data-testid={`item-bid-${idx}`}>
+                    <div className="mb-3">
+                      <div className="font-bold text-slate-900">{item.item_code}</div>
+                      <div className="text-sm text-slate-600">
+                        {item.description} - Qty: {item.quantity || 0} {item.unit || 'PCS'}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
+                        Your Unit Price (₹)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={itemBids[idx]?.unit_price || ''}
+                        onChange={(e) => updateItemBid(idx, e.target.value)}
+                        placeholder="0.00"
+                        className="h-12 font-mono text-lg"
+                        required
+                      />
+                      <p className="text-sm text-slate-500 mt-1">
+                        Line Total: <span className="font-mono font-bold">₹{((itemBids[idx]?.unit_price || 0) * item.quantity).toLocaleString('en-IN')}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="bg-slate-50 rounded-lg p-6">
+                  <div className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+                    Total Bid Amount
+                  </div>
+                  <div className="text-4xl font-mono font-bold text-slate-900" data-testid="total-amount">
+                    ₹{totalAmount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="delivery_days" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
+                      Delivery Days *
+                    </Label>
+                    <Input
+                      id="delivery_days"
+                      type="number"
+                      value={deliveryDays}
+                      onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      className="h-12"
+                      required
+                      data-testid="delivery-days-input"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="warranty_months" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
+                      Warranty *
+                    </Label>
+                    <select
+                      id="warranty_months"
+                      value={warrantyMonths}
+                      onChange={(e) => setWarrantyMonths(parseInt(e.target.value) || 0)}
+                      className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      data-testid="warranty-input"
+                    >
+                      <option value={12}>12 Months</option>
+                      <option value={24}>24 Months</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="payment_terms" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
+                      Payment Terms *
+                    </Label>
+                    <select
+                      id="payment_terms"
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value)}
+                      className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">Select Payment Terms</option>
+                      {PAYMENT_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="remarks" className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
+                    Remarks
+                  </Label>
+                  <Textarea
+                    id="remarks"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Any additional notes or conditions"
+                    rows={3}
+                    data-testid="remarks-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-4">
+              <Button
+                type="submit"
+                disabled={submitting || concluded}
+                size="lg"
+                className="h-14 px-12 text-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                data-testid="submit-bid-button"
+              >
+                {submitting ? 'Submitting...' : currentBid ? 'Update Bid' : 'Submit Bid'}
+              </Button>
+
+              {currentBid && !concluded && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleConclude}
+                  className="h-14 px-8 text-lg font-medium border-slate-300 text-slate-600 hover:bg-slate-100"
+                >
+                  <Ban className="w-5 h-5 mr-2" />
+                  Conclude Bidding
+                </Button>
+              )}
+            </div>
+          </form>
+        )}
       </main>
     </div>
   );

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '@/utils/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info } from 'lucide-react';
+import { ArrowLeft, Clock, Play, Copy, Trophy, Zap, Sparkles, Info, StopCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -56,6 +56,11 @@ const LiveAuction = () => {
     newSocket.on('auction_extended', (data) => {
       console.log('Auction extended:', data);
       toast.info('Auction duration has been extended due to recent bidding activity!');
+      fetchAuction();
+    });
+
+    newSocket.on('auction_terminated', () => {
+      toast.error('Auction has been terminated.');
       fetchAuction();
     });
 
@@ -120,6 +125,19 @@ const LiveAuction = () => {
       fetchAuction();
     } catch (error) {
       toast.error('Failed to start auction');
+    }
+  };
+
+  const terminateAuction = async () => {
+    if (!window.confirm('Are you sure you want to TERMINATE this auction? This action cannot be undone. The current L1 bid will be the final result.')) {
+      return;
+    }
+    try {
+      await api.post(`/auctions/${auctionId}/terminate`);
+      toast.success('Auction terminated successfully.');
+      fetchAuction();
+    } catch (error) {
+      toast.error('Failed to terminate auction');
     }
   };
 
@@ -258,6 +276,27 @@ const LiveAuction = () => {
               <Play className="w-5 h-5 mr-2" />
               Start Auction
             </Button>
+          </div>
+        )}
+
+        {/* Terminate button for active auctions */}
+        {auction.status === 'active' && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8" data-testid="terminate-section">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-heading font-bold text-red-900 mb-1">Terminate Auction</h3>
+                <p className="text-red-700 text-sm">End the auction immediately. Current L1 bid will be the final result.</p>
+              </div>
+              <Button
+                onClick={terminateAuction}
+                variant="destructive"
+                className="h-12 px-8 bg-red-600 hover:bg-red-700"
+                data-testid="terminate-button"
+              >
+                <StopCircle className="w-5 h-5 mr-2" />
+                Terminate Auction
+              </Button>
+            </div>
           </div>
         )}
 
