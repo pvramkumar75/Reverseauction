@@ -464,33 +464,44 @@ const SupplierBidding = () => {
               <h3 className="text-xl font-heading font-bold text-slate-900 mb-6">Submit Your Bid</h3>
 
               <div className="space-y-6">
-                {auction.items.map((item, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-lg p-4" data-testid={`item-bid-${idx}`}>
-                    <div className="mb-3">
-                      <div className="font-bold text-slate-900">{item.item_code}</div>
-                      <div className="text-sm text-slate-600">
-                        {item.description} - Qty: {item.quantity || 0} {item.unit || 'PCS'}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Your Unit Price (₹)
-                      </Label>
-                      <Input
-                        type="number"
-                        step={Number.isInteger(minDecrement) ? '1' : String(minDecrement)}
-                        value={itemBids[idx]?.unit_price || ''}
-                        onChange={(e) => updateItemBid(idx, e.target.value)}
-                        placeholder={Number.isInteger(minDecrement) ? '0' : '0.00'}
-                        className="h-12 font-mono text-lg"
-                        required
-                      />
-                      <p className="text-sm text-slate-500 mt-1">
-                        Line Total: <span className="font-mono font-bold">₹{((itemBids[idx]?.unit_price || 0) * item.quantity).toLocaleString('en-IN')}</span>
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-sm">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wide text-xs">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Item Code</th>
+                        <th className="px-4 py-3 font-semibold w-1/3">Description</th>
+                        <th className="px-4 py-3 font-semibold text-center w-24">Qty</th>
+                        <th className="px-4 py-3 font-semibold text-center w-20">Unit</th>
+                        <th className="px-4 py-3 font-semibold text-right w-40">Your Unit Price (₹)</th>
+                        <th className="px-4 py-3 font-semibold text-right w-36">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {auction.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 transition-colors" data-testid={`item-bid-${idx}`}>
+                          <td className="px-4 py-3 font-bold text-slate-900">{item.item_code}</td>
+                          <td className="px-4 py-3 text-slate-600">{item.description}</td>
+                          <td className="px-4 py-3 text-center text-slate-700">{item.quantity || 0}</td>
+                          <td className="px-4 py-3 text-center text-slate-700">{item.unit || 'PCS'}</td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="number"
+                              step={Number.isInteger(minDecrement) ? '1' : String(minDecrement)}
+                              value={itemBids[idx]?.unit_price || ''}
+                              onChange={(e) => updateItemBid(idx, e.target.value)}
+                              placeholder={Number.isInteger(minDecrement) ? '0' : '0.00'}
+                              className="h-10 text-right font-mono text-base border-slate-300 focus-visible:ring-indigo-500"
+                              required
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 bg-slate-50/50">
+                            ₹{((itemBids[idx]?.unit_price || 0) * (item.quantity || 0)).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
                 <div className="bg-slate-50 rounded-lg p-6">
                   <div className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">

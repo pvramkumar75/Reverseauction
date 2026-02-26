@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Plus, X, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, X, Zap, Upload, Copy } from 'lucide-react';
 
 const CreateAuction = () => {
   const navigate = useNavigate();
@@ -65,6 +65,64 @@ const CreateAuction = () => {
     const updated = [...items];
     updated[index][field] = field === 'quantity' || field === 'estimated_price' ? parseFloat(value) || 0 : value;
     setItems(updated);
+  };
+
+  const handlePasteItems = (e) => {
+    e.preventDefault();
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pastedData = clipboardData.getData('Text');
+    if (!pastedData) return;
+
+    const rows = pastedData.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
+    const newItems = rows.map((row) => {
+      const separator = row.includes('\t') ? '\t' : ',';
+      const cells = row.split(separator);
+      return {
+        item_code: cells[0]?.trim() || '',
+        description: cells[1]?.trim() || '',
+        quantity: parseFloat(cells[2]) || 0,
+        unit: cells[3]?.trim() || 'PCS',
+        estimated_price: parseFloat(cells[4]) || 0
+      };
+    });
+
+    if (items.length === 1 && !items[0].item_code && !items[0].description) {
+      setItems(newItems);
+    } else {
+      setItems([...items, ...newItems]);
+    }
+    toast.success(`Pasted ${newItems.length} items`);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = event.target.result;
+      const rows = csvData.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
+
+      const newItems = rows.map(row => {
+        const cells = row.split(',');
+        return {
+          item_code: cells[0]?.trim() || '',
+          description: cells[1]?.trim() || '',
+          quantity: parseFloat(cells[2]) || 0,
+          unit: cells[3]?.trim() || 'PCS',
+          estimated_price: parseFloat(cells[4]) || 0
+        };
+      });
+
+      if (items.length === 1 && !items[0].item_code && !items[0].description) {
+        setItems(newItems);
+      } else {
+        setItems([...items, ...newItems]);
+      }
+      toast.success(`Uploaded ${newItems.length} items from CSV`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const addSupplier = () => {
@@ -285,104 +343,146 @@ const CreateAuction = () => {
           </div>
         )}
 
-        {/* Step 2: Items */}
+        {/* Step 2: Items Grid */}
         {step === 2 && (
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-8" data-testid="step-items">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-heading font-bold text-slate-900">Items</h2>
-              <Button onClick={addItem} variant="outline" data-testid="add-item-button">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Item
-              </Button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+              <div>
+                <h2 className="text-2xl font-heading font-bold text-slate-900">Line Items Grid</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Add items manually or bulk paste/upload. <br />
+                  <span className="font-semibold text-slate-600">Format:</span> Item Code, Description, Qty, Unit, Estimated Price
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" onClick={() => document.getElementById('csv-upload').click()}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload CSV
+                </Button>
+                <input
+                  type="file"
+                  id="csv-upload"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+
+                <Button variant="outline" onClick={addItem}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Row
+                </Button>
+              </div>
             </div>
 
-            <div className="space-y-6">
-              {items.map((item, index) => (
-                <div key={index} className="border border-slate-200 rounded-lg p-6 relative" data-testid={`item-${index}`}>
-                  {items.length > 1 && (
-                    <button
-                      onClick={() => removeItem(index)}
-                      className="absolute top-4 right-4 text-slate-400 hover:text-red-600"
-                      data-testid={`remove-item-${index}`}
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
+            <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-sm" onPaste={handlePasteItems}>
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wide text-xs">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Item Code *</th>
+                    <th className="px-4 py-3 font-semibold w-1/3">Description *</th>
+                    <th className="px-4 py-3 font-semibold w-24">Qty</th>
+                    <th className="px-4 py-3 font-semibold w-28">Unit</th>
+                    <th className="px-4 py-3 font-semibold w-32">Est. Price</th>
+                    <th className="px-4 py-3 font-semibold w-32 text-right">Total</th>
+                    <th className="px-4 py-3 font-semibold w-16 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {items.map((item, index) => {
+                    const lineTotal = (item.quantity || 0) * (item.estimated_price || 0);
+                    const isCodeMissing = step === 2 && !item.item_code;
+                    const isDescMissing = step === 2 && !item.description;
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Item Code *
-                      </Label>
-                      <Input
-                        value={item.item_code}
-                        onChange={(e) => updateItem(index, 'item_code', e.target.value)}
-                        placeholder="SKU/Part Number"
-                        className="h-12"
-                      />
-                    </div>
+                    return (
+                      <tr key={index} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-2 py-2">
+                          <Input
+                            value={item.item_code}
+                            onChange={(e) => updateItem(index, 'item_code', e.target.value)}
+                            placeholder="Code"
+                            className={`h-9 text-sm ${isCodeMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateItem(index, 'description', e.target.value)}
+                            placeholder="Detailed Description"
+                            className={`h-9 text-sm ${isDescMissing ? 'border-red-300 focus-visible:ring-red-500' : ''}`}
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <Input
+                            type="number"
+                            value={item.quantity || ''}
+                            onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                            placeholder="0"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <select
+                            value={item.unit}
+                            onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          >
+                            <option value="PCS">PCS</option>
+                            <option value="KG">KG</option>
+                            <option value="MT">MT</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="Nos">Nos</option>
+                            <option value="Set">Set</option>
+                            <option value="Box">Box</option>
+                            <option value="Sq.m">Sq.m</option>
+                          </select>
+                        </td>
+                        <td className="px-2 py-2">
+                          <Input
+                            type="number"
+                            value={item.estimated_price || ''}
+                            onChange={(e) => updateItem(index, 'estimated_price', e.target.value)}
+                            placeholder="0.00"
+                            className="h-9 text-sm"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono font-medium text-slate-700">
+                          {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '-'}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          {items.length > 1 && (
+                            <button
+                              onClick={() => removeItem(index)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-50 border-t border-slate-200">
+                  <tr>
+                    <td colSpan={5} className="px-4 py-4 text-right font-bold text-slate-700">
+                      Auto Grand Total:
+                    </td>
+                    <td className="px-4 py-4 text-right font-mono font-bold text-indigo-700 text-base">
+                      ₹{items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.estimated_price || 0)), 0).toLocaleString('en-IN')}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
 
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Unit
-                      </Label>
-                      <select
-                        value={item.unit}
-                        onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                        className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="PCS">PCS (Pieces)</option>
-                        <option value="KG">KG (Kilograms)</option>
-                        <option value="MT">MT (Metric Ton)</option>
-                        <option value="M">M (Meters)</option>
-                        <option value="L">L (Liters)</option>
-                        <option value="Nos">Nos (Numbers)</option>
-                        <option value="Set">Set</option>
-                        <option value="Box">Box</option>
-                        <option value="Sq.m">Sq.m (Sq. Meters)</option>
-                      </select>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Description *
-                      </Label>
-                      <Textarea
-                        value={item.description}
-                        onChange={(e) => updateItem(index, 'description', e.target.value)}
-                        placeholder="Detailed specifications"
-                        rows={2}
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Quantity
-                      </Label>
-                      <Input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                        placeholder="0"
-                        className="h-12"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-semibold text-slate-700 mb-2 block uppercase tracking-wide">
-                        Estimated Price
-                      </Label>
-                      <Input
-                        type="number"
-                        value={item.estimated_price}
-                        onChange={(e) => updateItem(index, 'estimated_price', e.target.value)}
-                        placeholder="0.00"
-                        className="h-12"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-4 p-4 rounded-lg bg-blue-50/50 border border-blue-100 flex items-start gap-3">
+              <Copy className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <span className="font-semibold block mb-1">Grid Support Enabled!</span>
+                You can easily copy data from Excel (with matching 5 columns) and press <kbd className="px-1.5 py-0.5 bg-white border border-blue-200 rounded text-xs">Ctrl+V</kbd> anywhere inside this table box to instantly paste multiple line items.
+              </div>
             </div>
           </div>
         )}
